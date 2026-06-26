@@ -13,6 +13,7 @@ export const LeaseLambdaEnvironmentSchema =
     ISB_NAMESPACE: z.string(),
     LEASE_TABLE_NAME: z.string(),
     LEASE_TEMPLATE_TABLE_NAME: z.string(),
+    LEASE_COLLABORATOR_TABLE_NAME: z.string(),
     INTERMEDIATE_ROLE_ARN: z.string(),
     IDC_ROLE_ARN: z.string(),
     ORG_MGT_ROLE_ARN: z.string(),

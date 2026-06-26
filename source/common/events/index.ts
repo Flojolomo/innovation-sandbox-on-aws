@@ -24,4 +24,6 @@ export const EventDetailTypes = {
   BlueprintDeploymentSucceeded: "BlueprintDeploymentSucceeded",
   BlueprintDeploymentFailed: "BlueprintDeploymentFailed",
   LeaseProvisioningFailed: "LeaseProvisioningFailed",
+  CollaboratorInvited: "CollaboratorInvited",
+  CollaboratorRevoked: "CollaboratorRevoked",
 } as const;
