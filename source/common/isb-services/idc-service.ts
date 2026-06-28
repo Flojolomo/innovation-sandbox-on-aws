@@ -326,6 +326,18 @@ export class IdcService {
   }
 
   /**
+   * Revokes a single user's access to a specific account.
+   * Unlike revokeAllUserAccess which removes ALL user permission set assignments,
+   * this method targets a specific user.
+   *
+   * requires actions
+   *  "sso:DeleteAccountAssignment",
+   */
+  public async revokeSingleUserAccess(accountId: string, isbUser: IsbUser) {
+    await this.revokeUserAccess(accountId, isbUser);
+  }
+
+  /**
    * removes access to all users which have the user Permission Set
    * requires actions
    *  sso:ListAccountAssignments,

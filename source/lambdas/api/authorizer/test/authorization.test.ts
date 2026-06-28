@@ -10,6 +10,7 @@ import {
   extractMethodAndPathFromArnWithPathParameterEnd,
   extractMethodAndPathFromArnWithPathParameterMiddle,
   extractMethodAndPathFromArnWithPathParameterThirdFromEnd,
+  extractMethodAndPathFromArnWithTwoPathParameters,
   isAuthorized,
 } from "@amzn/innovation-sandbox-authorizer/authorization.js";
 import { AuthorizerLambdaEnvironmentSchema } from "@amzn/innovation-sandbox-commons/lambda/environments/authorizer-lambda-environment.js";
@@ -115,14 +116,16 @@ describe("authorization", () => {
 
   it("extract method and path from method ARN with path parameter third from end", () => {
     let result = extractMethodAndPathFromArnWithPathParameterThirdFromEnd(
-      methodArnPrefix + "/POST/leases/550e8400-e29b-41d4-a716-446655440000/extend/review",
+      methodArnPrefix +
+        "/POST/leases/550e8400-e29b-41d4-a716-446655440000/extend/review",
     );
     expect(result).toEqual({
       method: "POST",
       path: "/leases/{param}/extend/review",
     });
     result = extractMethodAndPathFromArnWithPathParameterThirdFromEnd(
-      methodArnPrefix + "/POST/v2/leases/550e8400-e29b-41d4-a716-446655440000/extend/review",
+      methodArnPrefix +
+        "/POST/v2/leases/550e8400-e29b-41d4-a716-446655440000/extend/review",
     );
     expect(result).toEqual({
       method: "POST",
@@ -574,6 +577,71 @@ describe("authorization", () => {
         ...testUserBase,
         roles: [role],
       };
+      const authorizationToken = jwt.sign({ user: testUser }, jwtSecret);
+      expect(
+        await isAuthorized({ methodArn, authorizationToken }, testContext),
+      ).toEqual(authorized);
+    },
+  );
+
+  it("extract method and path from method ARN with two path parameters", () => {
+    let result = extractMethodAndPathFromArnWithTwoPathParameters(
+      methodArnPrefix +
+        "/DELETE/leases/leaseId123/collaborators/user@example.com",
+    );
+    expect(result).toEqual({
+      method: "DELETE",
+      path: "/leases/{param}/collaborators/{param}",
+    });
+    result = extractMethodAndPathFromArnWithTwoPathParameters(
+      methodArnPrefix + "/DELETE/leases/leaseId123",
+    );
+    expect(result).toBeNull();
+  });
+
+  it.each([
+    { role: "Admin", authorized: true },
+    { role: "Manager", authorized: true },
+    { role: "User", authorized: true },
+  ] as const)(
+    "GET /leases/{param}/collaborators authorization for $role -> expected: $authorized",
+    async ({ role, authorized }) => {
+      const methodArn = methodArnPrefix + "/GET/leases/Lease101/collaborators";
+      const testUser: IsbUser = { ...testUserBase, roles: [role] };
+      const authorizationToken = jwt.sign({ user: testUser }, jwtSecret);
+      expect(
+        await isAuthorized({ methodArn, authorizationToken }, testContext),
+      ).toEqual(authorized);
+    },
+  );
+
+  it.each([
+    { role: "Admin", authorized: true },
+    { role: "Manager", authorized: true },
+    { role: "User", authorized: true },
+  ] as const)(
+    "POST /leases/{param}/collaborators authorization for $role -> expected: $authorized",
+    async ({ role, authorized }) => {
+      const methodArn = methodArnPrefix + "/POST/leases/Lease101/collaborators";
+      const testUser: IsbUser = { ...testUserBase, roles: [role] };
+      const authorizationToken = jwt.sign({ user: testUser }, jwtSecret);
+      expect(
+        await isAuthorized({ methodArn, authorizationToken }, testContext),
+      ).toEqual(authorized);
+    },
+  );
+
+  it.each([
+    { role: "Admin", authorized: true },
+    { role: "Manager", authorized: true },
+    { role: "User", authorized: true },
+  ] as const)(
+    "DELETE /leases/{param}/collaborators/{param} authorization for $role -> expected: $authorized",
+    async ({ role, authorized }) => {
+      const methodArn =
+        methodArnPrefix +
+        "/DELETE/leases/Lease101/collaborators/user@example.com";
+      const testUser: IsbUser = { ...testUserBase, roles: [role] };
       const authorizationToken = jwt.sign({ user: testUser }, jwtSecret);
       expect(
         await isAuthorized({ methodArn, authorizationToken }, testContext),

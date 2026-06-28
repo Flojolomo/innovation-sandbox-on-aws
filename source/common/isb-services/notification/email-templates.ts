@@ -3,6 +3,8 @@
 
 import { AccountCleanupFailureEvent } from "@amzn/innovation-sandbox-commons/events/account-cleanup-failure-event.js";
 import { AccountDriftDetectedAlert } from "@amzn/innovation-sandbox-commons/events/account-drift-detected-alert.js";
+import { CollaboratorInvitedEvent } from "@amzn/innovation-sandbox-commons/events/collaborator-invited-event.js";
+import { CollaboratorRevokedEvent } from "@amzn/innovation-sandbox-commons/events/collaborator-revoked-event.js";
 import { GroupCostReportGeneratedEvent } from "@amzn/innovation-sandbox-commons/events/group-cost-report-generated-event.js";
 import { GroupCostReportGeneratedFailureEvent } from "@amzn/innovation-sandbox-commons/events/group-cost-report-generated-failure-event.js";
 import { LeaseExtensionApprovedEvent } from "@amzn/innovation-sandbox-commons/events/lease-extension-approved-event.js";
@@ -686,6 +688,61 @@ export namespace EmailTemplates {
       textBody: `
       Your lease extension request for lease ID: ${event.Detail.leaseId.uuid} has been denied by ${event.Detail.deniedBy}.${event.Detail.comments ? ` Reason: ${event.Detail.comments}` : ""}
       Contact your Innovation Sandbox on AWS administrator or manager for more details.
+    `,
+    };
+  }
+
+  export function CollaboratorInvited(
+    event: CollaboratorInvitedEvent,
+    context: EmailTemplatesContext,
+  ): SynthesizedEmail {
+    return {
+      to: context.destination.to!,
+      subject:
+        "[Informational] Innovation Sandbox: You have been invited to collaborate on a sandbox account",
+      htmlBody: `
+      <h1>You have been invited to collaborate on a sandbox account</h1>
+      <p>${event.Detail.invitedBy} has invited you to collaborate on AWS account ${event.Detail.accountId}.</p>
+      <p>You now have access to this sandbox account via IAM Identity Center.
+      Sign in to the AWS Access Portal or Innovation Sandbox on AWS at ${context.webAppUrl} to access the account.</p>
+    `,
+      textBody: `
+      You have been invited to collaborate on a sandbox account
+
+      ${event.Detail.invitedBy} has invited you to collaborate on AWS account ${event.Detail.accountId}.
+      You now have access to this sandbox account via IAM Identity Center.
+      Sign in to the AWS Access Portal or Innovation Sandbox on AWS at ${context.webAppUrl} to access the account.
+    `,
+    };
+  }
+
+  export function CollaboratorRevoked(
+    event: CollaboratorRevokedEvent,
+    context: EmailTemplatesContext,
+  ): SynthesizedEmail {
+    const reasonText =
+      event.Detail.reason === "ManuallyRevoked"
+        ? `Your access was revoked by ${event.Detail.revokedBy}.`
+        : event.Detail.reason === "LeaseFrozen"
+          ? "The lease has been frozen and all collaborator access has been temporarily revoked."
+          : "The lease has been terminated and all collaborator access has been revoked.";
+
+    return {
+      to: context.destination.to!,
+      subject:
+        "[Informational] Innovation Sandbox: Your collaboration access has been revoked",
+      htmlBody: `
+      <h1>Your collaboration access has been revoked</h1>
+      <p>Your access to AWS account ${event.Detail.accountId} has been removed.</p>
+      <p>${reasonText}</p>
+      <p>If you believe this was done in error, contact the lease owner or your Innovation Sandbox administrator.</p>
+    `,
+      textBody: `
+      Your collaboration access has been revoked
+
+      Your access to AWS account ${event.Detail.accountId} has been removed.
+      ${reasonText}
+      If you believe this was done in error, contact the lease owner or your Innovation Sandbox administrator.
     `,
     };
   }

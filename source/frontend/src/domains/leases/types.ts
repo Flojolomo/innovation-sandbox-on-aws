@@ -32,3 +32,17 @@ export type LeaseExtensionRequest = {
 };
 
 export type MonitoredLeaseWithLeaseId = MonitoredLease & LeaseWithLeaseId;
+
+export interface LeaseCollaborator {
+  leaseUuid: string;
+  collaboratorEmail: string;
+  ownerEmail: string;
+  invitedBy: string;
+  awsAccountId: string;
+  status: "Active" | "Revoked";
+  meta?: {
+    createdTime?: string;
+    lastEditTime?: string;
+    schemaVersion: number;
+  };
+}

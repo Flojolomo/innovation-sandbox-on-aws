@@ -5,6 +5,8 @@ import { Logger } from "@aws-lambda-powertools/logger";
 import { BlueprintStore } from "@amzn/innovation-sandbox-commons/data/blueprint/blueprint-store.js";
 import { PutResult } from "@amzn/innovation-sandbox-commons/data/common-types.js";
 import { GlobalConfig } from "@amzn/innovation-sandbox-commons/data/global-config/global-config.js";
+import { LeaseCollaboratorStore } from "@amzn/innovation-sandbox-commons/data/lease-collaborator/lease-collaborator-store.js";
+import { LeaseCollaborator } from "@amzn/innovation-sandbox-commons/data/lease-collaborator/lease-collaborator.js";
 import { LeaseTemplateStore } from "@amzn/innovation-sandbox-commons/data/lease-template/lease-template-store.js";
 import { LeaseTemplate } from "@amzn/innovation-sandbox-commons/data/lease-template/lease-template.js";
 import { LeaseStore } from "@amzn/innovation-sandbox-commons/data/lease/lease-store.js";
@@ -32,6 +34,8 @@ import {
 import { AccountQuarantinedEvent } from "@amzn/innovation-sandbox-commons/events/account-quarantined-event.js";
 import { BlueprintDeploymentRequest } from "@amzn/innovation-sandbox-commons/events/blueprint-deployment-request.js";
 import { CleanAccountRequest } from "@amzn/innovation-sandbox-commons/events/clean-account-request.js";
+import { CollaboratorInvitedEvent } from "@amzn/innovation-sandbox-commons/events/collaborator-invited-event.js";
+import { CollaboratorRevokedEvent } from "@amzn/innovation-sandbox-commons/events/collaborator-revoked-event.js";
 import { LeaseApprovedEvent } from "@amzn/innovation-sandbox-commons/events/lease-approved-event.js";
 import { LeaseDeniedEvent } from "@amzn/innovation-sandbox-commons/events/lease-denied-event.js";
 import { LeaseExtensionApprovedEvent } from "@amzn/innovation-sandbox-commons/events/lease-extension-approved-event.js";
@@ -83,6 +87,10 @@ export class AccountNotInActiveError extends InnovationSandboxError {}
 export class AccountNotInFrozenError extends InnovationSandboxError {}
 export class CouldNotFindAccountError extends InnovationSandboxError {}
 export class CouldNotRetrieveUserError extends InnovationSandboxError {}
+export class CollaboratorAlreadyExistsError extends InnovationSandboxError {}
+export class CannotInviteSelfError extends InnovationSandboxError {}
+export class LeaseNotActiveError extends InnovationSandboxError {}
+export class CollaboratorNotFoundError extends InnovationSandboxError {}
 export class LeaseExtensionExceedsMaxDurationError extends InnovationSandboxError {}
 export class LeaseExtensionAlreadyPendingError extends InnovationSandboxError {}
 export class LeaseExtensionDateNotInFutureError extends InnovationSandboxError {}
@@ -280,6 +288,7 @@ export class InnovationSandbox {
       idcService: IdcService;
       orgsService: SandboxOuService;
       eventBridgeClient: IsbEventBridgeClient;
+      leaseCollaboratorStore?: LeaseCollaboratorStore;
     }>,
   ) {
     const { lease, reason } = props;
@@ -343,6 +352,23 @@ export class InnovationSandbox {
         reason: reason,
       }),
     );
+
+    // Revoke all collaborator records (IDC access already revoked by revokeAllUserAccess above)
+    if (context.leaseCollaboratorStore) {
+      await InnovationSandbox.revokeAllCollaboratorRecords(
+        {
+          lease,
+          reason: "LeaseFrozen",
+          revokedBy: "SYSTEM",
+        },
+        {
+          logger,
+          tracer,
+          leaseCollaboratorStore: context.leaseCollaboratorStore,
+          eventBridgeClient,
+        },
+      );
+    }
   }
 
   @logErrors
@@ -361,6 +387,7 @@ export class InnovationSandbox {
       globalConfig: GlobalConfig;
       blueprintStore: BlueprintStore;
       blueprintDeploymentService: BlueprintDeploymentService;
+      leaseCollaboratorStore?: LeaseCollaboratorStore;
     }>,
   ) {
     const { lease, expiredStatus } = props;
@@ -461,6 +488,23 @@ export class InnovationSandbox {
     );
 
     await eventBridgeClient.sendIsbEvents(tracer, ...eventsToSend);
+
+    // Revoke all collaborator records (IDC access already revoked by revokeAllUserAccess above)
+    if (context.leaseCollaboratorStore) {
+      await InnovationSandbox.revokeAllCollaboratorRecords(
+        {
+          lease,
+          reason: "LeaseTerminated",
+          revokedBy: "SYSTEM",
+        },
+        {
+          logger,
+          tracer,
+          leaseCollaboratorStore: context.leaseCollaboratorStore,
+          eventBridgeClient,
+        },
+      );
+    }
   }
 
   @logErrors
@@ -474,6 +518,7 @@ export class InnovationSandbox {
       idcService: IdcService;
       orgsService: SandboxOuService;
       eventBridgeClient: IsbEventBridgeClient;
+      leaseCollaboratorStore?: LeaseCollaboratorStore;
     }>,
   ): Promise<PutResult<Lease>> {
     const { lease } = props;
@@ -541,6 +586,20 @@ export class InnovationSandbox {
         reason: "Manually unfrozen",
       }),
     );
+
+    // Restore collaborator access after unfreeze
+    if (context.leaseCollaboratorStore) {
+      await InnovationSandbox.restoreCollaboratorAccess(
+        { lease },
+        {
+          logger,
+          tracer,
+          leaseCollaboratorStore: context.leaseCollaboratorStore,
+          idcService,
+          eventBridgeClient,
+        },
+      );
+    }
 
     return transactionResult;
   }
@@ -1352,6 +1411,363 @@ export class InnovationSandbox {
           },
         );
       }
+    }
+  }
+
+  /**
+   * Invite a collaborator to share access to an active lease's AWS account.
+   *
+   * Grants the collaborator the same IAM Identity Center user permission set
+   * on the lease's sandbox account and creates a collaborator record for tracking.
+   *
+   * @param props - Lease, collaborator user, and inviter details
+   * @param context - ISB context with required services
+   */
+  @logErrors
+  public static async inviteCollaborator(
+    props: {
+      lease: MonitoredLease;
+      collaborator: IsbUser;
+      invitedBy: IsbUser;
+    },
+    context: IsbContext<{
+      leaseCollaboratorStore: LeaseCollaboratorStore;
+      idcService: IdcService;
+      eventBridgeClient: IsbEventBridgeClient;
+    }>,
+  ): Promise<LeaseCollaborator> {
+    const { lease, collaborator, invitedBy } = props;
+    const {
+      logger,
+      tracer,
+      leaseCollaboratorStore,
+      idcService,
+      eventBridgeClient,
+    } = context;
+
+    addCorrelationContext(logger, searchableLeaseProperties(lease));
+
+    if (!isActiveLease(lease)) {
+      throw new LeaseNotActiveError(
+        "Collaborators can only be invited to active leases.",
+      );
+    }
+
+    if (collaborator.email === lease.userEmail) {
+      throw new CannotInviteSelfError(
+        "The lease owner cannot be invited as a collaborator.",
+      );
+    }
+
+    // Check if collaborator already exists for this lease
+    const existingResult = await leaseCollaboratorStore.get({
+      leaseUuid: lease.uuid,
+      collaboratorEmail: collaborator.email,
+    });
+
+    if (existingResult.result && existingResult.result.status === "Active") {
+      throw new CollaboratorAlreadyExistsError(
+        `User (${collaborator.email}) is already a collaborator on this lease.`,
+      );
+    }
+
+    // Grant IDC access to the collaborator
+    await idcService
+      .transactionalGrantUserAccess(lease.awsAccountId, collaborator)
+      .complete();
+
+    // Create or re-activate the collaborator record
+    let newCollaborator: LeaseCollaborator;
+    if (existingResult.result) {
+      // Re-activate a previously revoked collaborator
+      const updateResult = await leaseCollaboratorStore.update({
+        ...existingResult.result,
+        status: "Active",
+        invitedBy: invitedBy.email,
+      });
+      newCollaborator = updateResult.newItem;
+    } else {
+      newCollaborator = await leaseCollaboratorStore.create({
+        leaseUuid: lease.uuid,
+        collaboratorEmail: collaborator.email,
+        ownerEmail: lease.userEmail,
+        invitedBy: invitedBy.email,
+        awsAccountId: lease.awsAccountId,
+        status: "Active",
+      });
+    }
+
+    logger.info(
+      `Collaborator (${collaborator.email}) invited to lease (${lease.uuid}) by (${invitedBy.email}). Account: (${lease.awsAccountId})`,
+      {
+        ...searchableLeaseProperties(lease),
+        collaboratorEmail: collaborator.email,
+        invitedBy: invitedBy.email,
+      },
+    );
+
+    await eventBridgeClient.sendIsbEvent(
+      tracer,
+      new CollaboratorInvitedEvent({
+        leaseId: {
+          userEmail: lease.userEmail,
+          uuid: lease.uuid,
+        },
+        accountId: lease.awsAccountId,
+        collaboratorEmail: collaborator.email,
+        invitedBy: invitedBy.email,
+      }),
+    );
+
+    return newCollaborator;
+  }
+
+  /**
+   * Revoke a collaborator's access to a lease's AWS account.
+   *
+   * Removes the collaborator's IAM Identity Center permission set assignment
+   * and marks the collaborator record as revoked.
+   *
+   * @param props - Lease, collaborator email, revoker, and reason
+   * @param context - ISB context with required services
+   */
+  @logErrors
+  public static async revokeCollaborator(
+    props: {
+      lease: MonitoredLease;
+      collaboratorEmail: string;
+      revokedBy: string;
+      reason: "ManuallyRevoked" | "LeaseTerminated" | "LeaseFrozen";
+    },
+    context: IsbContext<{
+      leaseCollaboratorStore: LeaseCollaboratorStore;
+      idcService: IdcService;
+      eventBridgeClient: IsbEventBridgeClient;
+    }>,
+  ): Promise<void> {
+    const { lease, collaboratorEmail, revokedBy, reason } = props;
+    const {
+      logger,
+      tracer,
+      leaseCollaboratorStore,
+      idcService,
+      eventBridgeClient,
+    } = context;
+
+    addCorrelationContext(logger, searchableLeaseProperties(lease));
+
+    const existingResult = await leaseCollaboratorStore.get({
+      leaseUuid: lease.uuid,
+      collaboratorEmail,
+    });
+
+    if (!existingResult.result || existingResult.result.status !== "Active") {
+      throw new CollaboratorNotFoundError(
+        `Active collaborator (${collaboratorEmail}) not found for lease (${lease.uuid}).`,
+      );
+    }
+
+    // Revoke IDC access for the collaborator
+    const collaboratorUser =
+      await idcService.getUserFromEmail(collaboratorEmail);
+    if (collaboratorUser) {
+      await idcService.revokeSingleUserAccess(
+        lease.awsAccountId,
+        collaboratorUser,
+      );
+    }
+
+    // Mark the collaborator as revoked
+    await leaseCollaboratorStore.update({
+      ...existingResult.result,
+      status: "Revoked",
+    });
+
+    logger.info(
+      `Collaborator (${collaboratorEmail}) revoked from lease (${lease.uuid}) by (${revokedBy}). Reason: ${reason}`,
+      {
+        ...searchableLeaseProperties(lease),
+        collaboratorEmail,
+        revokedBy,
+        reason,
+      },
+    );
+
+    await eventBridgeClient.sendIsbEvent(
+      tracer,
+      new CollaboratorRevokedEvent({
+        leaseId: {
+          userEmail: lease.userEmail,
+          uuid: lease.uuid,
+        },
+        accountId: lease.awsAccountId,
+        collaboratorEmail,
+        revokedBy,
+        reason,
+      }),
+    );
+  }
+
+  /**
+   * Revoke all active collaborators for a lease.
+   * Used internally when a lease is frozen or terminated.
+   *
+   * Note: This method does NOT individually revoke IDC access per collaborator
+   * because the freeze/terminate flows already call revokeAllUserAccess on the account,
+   * which removes all user permission set assignments including collaborators.
+   * This method only updates the collaborator records to "Revoked" status.
+   *
+   * @param props - Lease and reason for revocation
+   * @param context - ISB context with required services
+   */
+  @logErrors
+  public static async revokeAllCollaboratorRecords(
+    props: {
+      lease: MonitoredLease;
+      reason: "LeaseTerminated" | "LeaseFrozen";
+      revokedBy: string;
+    },
+    context: IsbContext<{
+      leaseCollaboratorStore: LeaseCollaboratorStore;
+      eventBridgeClient: IsbEventBridgeClient;
+    }>,
+  ): Promise<void> {
+    const { lease, reason, revokedBy } = props;
+    const { logger, tracer, leaseCollaboratorStore, eventBridgeClient } =
+      context;
+
+    addCorrelationContext(logger, searchableLeaseProperties(lease));
+
+    const activeCollaborators = await collect(
+      stream(
+        leaseCollaboratorStore,
+        leaseCollaboratorStore.findActiveByLeaseUuid,
+        {
+          leaseUuid: lease.uuid,
+        },
+      ),
+    );
+
+    for (const collaborator of activeCollaborators) {
+      await leaseCollaboratorStore.update({
+        ...collaborator,
+        status: "Revoked",
+      });
+
+      await eventBridgeClient.sendIsbEvent(
+        tracer,
+        new CollaboratorRevokedEvent({
+          leaseId: {
+            userEmail: lease.userEmail,
+            uuid: lease.uuid,
+          },
+          accountId: lease.awsAccountId,
+          collaboratorEmail: collaborator.collaboratorEmail,
+          revokedBy,
+          reason,
+        }),
+      );
+    }
+
+    if (activeCollaborators.length > 0) {
+      logger.info(
+        `Revoked ${activeCollaborators.length} collaborator(s) from lease (${lease.uuid}). Reason: ${reason}`,
+        {
+          ...searchableLeaseProperties(lease),
+          collaboratorCount: activeCollaborators.length,
+          reason,
+        },
+      );
+    }
+  }
+
+  /**
+   * Restore access for all previously active collaborators when a lease is unfrozen.
+   *
+   * Re-grants IDC access and updates collaborator records back to "Active" status.
+   *
+   * @param props - Lease to restore collaborators for
+   * @param context - ISB context with required services
+   */
+  @logErrors
+  public static async restoreCollaboratorAccess(
+    props: {
+      lease: MonitoredLease;
+    },
+    context: IsbContext<{
+      leaseCollaboratorStore: LeaseCollaboratorStore;
+      idcService: IdcService;
+      eventBridgeClient: IsbEventBridgeClient;
+    }>,
+  ): Promise<void> {
+    const { lease } = props;
+    const {
+      logger,
+      tracer,
+      leaseCollaboratorStore,
+      idcService,
+      eventBridgeClient,
+    } = context;
+
+    addCorrelationContext(logger, searchableLeaseProperties(lease));
+
+    // Find collaborators that were revoked due to freeze (they should be restored)
+    const revokedCollaborators = await collect(
+      stream(leaseCollaboratorStore, leaseCollaboratorStore.findByLeaseUuid, {
+        leaseUuid: lease.uuid,
+      }),
+    );
+
+    const frozenRevoked = revokedCollaborators.filter(
+      (c) => c.status === "Revoked",
+    );
+
+    let restoredCount = 0;
+    for (const collaborator of frozenRevoked) {
+      const collaboratorUser = await idcService.getUserFromEmail(
+        collaborator.collaboratorEmail,
+      );
+
+      if (!collaboratorUser) {
+        logger.warn(
+          `Collaborator (${collaborator.collaboratorEmail}) not found in IDC during restore. Skipping.`,
+        );
+        continue;
+      }
+
+      await idcService
+        .transactionalGrantUserAccess(lease.awsAccountId, collaboratorUser)
+        .complete();
+
+      await leaseCollaboratorStore.update({
+        ...collaborator,
+        status: "Active",
+      });
+
+      await eventBridgeClient.sendIsbEvent(
+        tracer,
+        new CollaboratorInvitedEvent({
+          leaseId: {
+            userEmail: lease.userEmail,
+            uuid: lease.uuid,
+          },
+          accountId: lease.awsAccountId,
+          collaboratorEmail: collaborator.collaboratorEmail,
+          invitedBy: "SYSTEM_RESTORE",
+        }),
+      );
+
+      restoredCount++;
+    }
+
+    if (restoredCount > 0) {
+      logger.info(
+        `Restored access for ${restoredCount} collaborator(s) on lease (${lease.uuid}) after unfreeze.`,
+        {
+          ...searchableLeaseProperties(lease),
+          restoredCount,
+        },
+      );
     }
   }
 

@@ -25,6 +25,7 @@ import {
 } from "@amzn/innovation-sandbox-commons/data/global-config/global-config-utils.js";
 import { LeaseTemplateStore } from "@amzn/innovation-sandbox-commons/data/lease-template/lease-template-store.js";
 import {
+  isActiveLease,
   isFrozenLease,
   isMonitoredLease,
   isPendingLease,
@@ -38,6 +39,9 @@ import { validateCostReportGroup } from "@amzn/innovation-sandbox-commons/data/r
 import {
   AccountNotInActiveError,
   AccountNotInFrozenError,
+  CannotInviteSelfError,
+  CollaboratorAlreadyExistsError,
+  CollaboratorNotFoundError,
   CouldNotFindAccountError,
   CouldNotRetrieveUserError,
   InnovationSandbox,
@@ -45,6 +49,7 @@ import {
   LeaseExtensionAlreadyPendingError,
   LeaseExtensionDateNotInFutureError,
   LeaseExtensionExceedsMaxDurationError,
+  LeaseNotActiveError,
   MaxNumberOfLeasesExceededError,
   NoAccountsAvailableError,
 } from "@amzn/innovation-sandbox-commons/innovation-sandbox.js";
@@ -137,6 +142,23 @@ const routes: Route<IsbApiEvent, APIGatewayProxyResult>[] = [
     path: "/leases/{leaseId}/unfreeze",
     method: "POST",
     handler: middyFactory().handler(unfreezeLeaseHandler),
+  },
+  {
+    path: "/leases/{leaseId}/collaborators",
+    method: "GET",
+    handler: middyFactory().handler(getCollaboratorsHandler),
+  },
+  {
+    path: "/leases/{leaseId}/collaborators",
+    method: "POST",
+    handler: middyFactory()
+      .use(httpJsonBodyParser())
+      .handler(inviteCollaboratorHandler),
+  },
+  {
+    path: "/leases/{leaseId}/collaborators/{collaboratorEmail}",
+    method: "DELETE",
+    handler: middyFactory().handler(revokeCollaboratorHandler),
   },
   {
     path: "/leases/{leaseId}/extend",
@@ -1187,8 +1209,7 @@ async function requestLeaseExtensionHandler(
         data: {
           errors: [
             {
-              message:
-                "The lease was modified concurrently. Please try again.",
+              message: "The lease was modified concurrently. Please try again.",
             },
           ],
         },
@@ -1382,4 +1403,336 @@ function authorizedToLeaseFromPrivateLeaseTemplates(user: IsbUser) {
       (role: IsbRole) => role === "Admin" || role === "Manager",
     ) ?? false
   );
+}
+
+// --- Collaborator Handlers ---
+
+async function getCollaboratorsHandler(
+  event: IsbApiEvent,
+  context: ContextWithGlobalAndReportingConfig &
+    IsbApiContext<LeaseLambdaEnvironment>,
+): Promise<APIGatewayProxyResult> {
+  const leaseStore = IsbServices.leaseStore(context.env);
+  const leaseCollaboratorStore = IsbServices.leaseCollaboratorStore(
+    context.env,
+  );
+
+  const leaseCompositeKey = parseLeaseCompositeKeyFromPathParameters(
+    event.pathParameters,
+  );
+
+  const leaseResponse = await leaseStore.get(leaseCompositeKey);
+  const lease = leaseResponse.result;
+  if (leaseResponse.error) {
+    logger.warn(
+      `Error retrieving lease ${leaseCompositeKey}: ${leaseResponse.error}`,
+    );
+  }
+
+  if (!lease) {
+    throw createHttpJSendError({
+      statusCode: 404,
+      data: {
+        errors: [{ message: "Lease not found." }],
+      },
+    });
+  }
+
+  // Only the lease owner, Managers, or Admins can view collaborators
+  if (isUserNotAllowedByEmail(context.user, lease.userEmail)) {
+    throw createHttpJSendError({
+      statusCode: 403,
+      data: {
+        errors: [
+          {
+            message:
+              "User is not authorized to view collaborators for this lease.",
+          },
+        ],
+      },
+    });
+  }
+
+  const collaboratorsResponse = await leaseCollaboratorStore.findByLeaseUuid({
+    leaseUuid: lease.uuid,
+  });
+
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      status: "success",
+      data: collaboratorsResponse,
+    }),
+    headers: {
+      "Content-Type": "application/json",
+    },
+  };
+}
+
+async function inviteCollaboratorHandler(
+  event: IsbApiEvent,
+  context: ContextWithGlobalAndReportingConfig &
+    IsbApiContext<LeaseLambdaEnvironment>,
+): Promise<APIGatewayProxyResult> {
+  const leaseStore = IsbServices.leaseStore(context.env);
+  const idcService = IsbServices.idcService(
+    context.env,
+    fromTemporaryIsbIdcCredentials(context.env),
+  );
+  const leaseCollaboratorStore = IsbServices.leaseCollaboratorStore(
+    context.env,
+  );
+  const eventBridgeClient = IsbServices.isbEventBridge(context.env);
+
+  const InviteCollaboratorBodySchema = z
+    .object({
+      collaboratorEmail: z.string().email(),
+    })
+    .strict();
+
+  const parsedBody = InviteCollaboratorBodySchema.safeParse(event.body);
+  if (!parsedBody.success) {
+    throw createHttpJSendValidationError(parsedBody.error);
+  }
+
+  const { collaboratorEmail } = parsedBody.data;
+
+  const leaseCompositeKey = parseLeaseCompositeKeyFromPathParameters(
+    event.pathParameters,
+  );
+
+  const leaseResponse = await leaseStore.get(leaseCompositeKey);
+  const lease = leaseResponse.result;
+  if (leaseResponse.error) {
+    logger.warn(
+      `Error retrieving lease ${leaseCompositeKey}: ${leaseResponse.error}`,
+    );
+  }
+
+  if (!lease) {
+    throw createHttpJSendError({
+      statusCode: 404,
+      data: {
+        errors: [{ message: "Lease not found." }],
+      },
+    });
+  }
+
+  // Only the lease owner, Managers, or Admins can invite collaborators
+  if (isUserNotAllowedByEmail(context.user, lease.userEmail)) {
+    throw createHttpJSendError({
+      statusCode: 403,
+      data: {
+        errors: [
+          {
+            message:
+              "User is not authorized to invite collaborators to this lease.",
+          },
+        ],
+      },
+    });
+  }
+
+  if (!isActiveLease(lease)) {
+    throw createHttpJSendError({
+      statusCode: 409,
+      data: {
+        errors: [
+          { message: "Collaborators can only be invited to active leases." },
+        ],
+      },
+    });
+  }
+
+  // Resolve the collaborator user in IDC
+  const collaboratorUser = await idcService.getUserFromEmail(collaboratorEmail);
+  if (!collaboratorUser) {
+    throw createHttpJSendError({
+      statusCode: 404,
+      data: {
+        errors: [{ message: "Collaborator not found in Identity Center." }],
+      },
+    });
+  }
+
+  try {
+    const collaborator = await InnovationSandbox.inviteCollaborator(
+      {
+        lease,
+        collaborator: collaboratorUser,
+        invitedBy: context.user,
+      },
+      {
+        logger,
+        tracer,
+        leaseCollaboratorStore,
+        idcService,
+        eventBridgeClient,
+      },
+    );
+
+    return {
+      statusCode: 201,
+      body: JSON.stringify({
+        status: "success",
+        data: collaborator,
+      }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+    };
+  } catch (error) {
+    if (error instanceof CollaboratorAlreadyExistsError) {
+      throw createHttpJSendError({
+        statusCode: 409,
+        data: {
+          errors: [{ message: error.message }],
+        },
+      });
+    } else if (error instanceof CannotInviteSelfError) {
+      throw createHttpJSendError({
+        statusCode: 400,
+        data: {
+          errors: [{ message: error.message }],
+        },
+      });
+    } else if (error instanceof LeaseNotActiveError) {
+      throw createHttpJSendError({
+        statusCode: 409,
+        data: {
+          errors: [{ message: error.message }],
+        },
+      });
+    } else {
+      throw error;
+    }
+  }
+}
+
+async function revokeCollaboratorHandler(
+  event: IsbApiEvent,
+  context: ContextWithGlobalAndReportingConfig &
+    IsbApiContext<LeaseLambdaEnvironment>,
+): Promise<APIGatewayProxyResult> {
+  const leaseStore = IsbServices.leaseStore(context.env);
+  const idcService = IsbServices.idcService(
+    context.env,
+    fromTemporaryIsbIdcCredentials(context.env),
+  );
+  const leaseCollaboratorStore = IsbServices.leaseCollaboratorStore(
+    context.env,
+  );
+  const eventBridgeClient = IsbServices.isbEventBridge(context.env);
+
+  const PathParametersSchema = z.object({
+    leaseId: z.string().base64(),
+    collaboratorEmail: z.string(),
+  });
+  const parsedPathParams = PathParametersSchema.safeParse(event.pathParameters);
+  if (!parsedPathParams.success) {
+    throw createHttpJSendValidationError(parsedPathParams.error);
+  }
+
+  const collaboratorEmail = decodeURIComponent(
+    parsedPathParams.data.collaboratorEmail,
+  );
+
+  const emailValidation = z.string().email().safeParse(collaboratorEmail);
+  if (!emailValidation.success) {
+    throw createHttpJSendError({
+      statusCode: 400,
+      data: {
+        errors: [{ message: "Invalid collaborator email format." }],
+      },
+    });
+  }
+
+  const leaseCompositeKey = parseLeaseCompositeKeyFromPathParameters(
+    event.pathParameters,
+  );
+
+  const leaseResponse = await leaseStore.get(leaseCompositeKey);
+  const lease = leaseResponse.result;
+  if (leaseResponse.error) {
+    logger.warn(
+      `Error retrieving lease ${leaseCompositeKey}: ${leaseResponse.error}`,
+    );
+  }
+
+  if (!lease) {
+    throw createHttpJSendError({
+      statusCode: 404,
+      data: {
+        errors: [{ message: "Lease not found." }],
+      },
+    });
+  }
+
+  // Only the lease owner, Managers, or Admins can revoke collaborators
+  if (isUserNotAllowedByEmail(context.user, lease.userEmail)) {
+    throw createHttpJSendError({
+      statusCode: 403,
+      data: {
+        errors: [
+          {
+            message:
+              "User is not authorized to revoke collaborators from this lease.",
+          },
+        ],
+      },
+    });
+  }
+
+  if (!isMonitoredLease(lease)) {
+    throw createHttpJSendError({
+      statusCode: 409,
+      data: {
+        errors: [
+          {
+            message: "Collaborators can only be revoked from monitored leases.",
+          },
+        ],
+      },
+    });
+  }
+
+  try {
+    await InnovationSandbox.revokeCollaborator(
+      {
+        lease,
+        collaboratorEmail,
+        revokedBy: context.user.email,
+        reason: "ManuallyRevoked",
+      },
+      {
+        logger,
+        tracer,
+        leaseCollaboratorStore,
+        idcService,
+        eventBridgeClient,
+      },
+    );
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        status: "success",
+        data: null,
+      }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+    };
+  } catch (error) {
+    if (error instanceof CollaboratorNotFoundError) {
+      throw createHttpJSendError({
+        statusCode: 404,
+        data: {
+          errors: [{ message: error.message }],
+        },
+      });
+    } else {
+      throw error;
+    }
+  }
 }
