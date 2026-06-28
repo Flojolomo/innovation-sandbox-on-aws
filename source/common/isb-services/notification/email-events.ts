@@ -20,6 +20,7 @@ export const SubscribedEmailEvents = [
   EventDetailTypes.LeaseDurationThresholdBreachedAlert,
   EventDetailTypes.GroupCostReportGenerated,
   EventDetailTypes.GroupCostReportGeneratedFailure,
+  EventDetailTypes.CollaboratorInvited,
 ];
 
 export type EmailEventName = (typeof SubscribedEmailEvents)[number];
