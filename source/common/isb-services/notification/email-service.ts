@@ -4,6 +4,7 @@
 import { AccountCleanupFailureEvent } from "@amzn/innovation-sandbox-commons/events/account-cleanup-failure-event.js";
 import { AccountDriftDetectedAlert } from "@amzn/innovation-sandbox-commons/events/account-drift-detected-alert.js";
 import { CollaboratorInvitedEvent } from "@amzn/innovation-sandbox-commons/events/collaborator-invited-event.js";
+import { CollaboratorRevokedEvent } from "@amzn/innovation-sandbox-commons/events/collaborator-revoked-event.js";
 import { GroupCostReportGeneratedEvent } from "@amzn/innovation-sandbox-commons/events/group-cost-report-generated-event.js";
 import { GroupCostReportGeneratedFailureEvent } from "@amzn/innovation-sandbox-commons/events/group-cost-report-generated-failure-event.js";
 import { LeaseExtensionApprovedEvent } from "@amzn/innovation-sandbox-commons/events/lease-extension-approved-event.js";
@@ -317,6 +318,22 @@ export class EmailService {
           EmailTemplates.CollaboratorInvited(
             collaboratorInvitedEvent,
             collaboratorInvitedContext,
+          ),
+        );
+        break;
+      case "CollaboratorRevoked":
+        const collaboratorRevokedEvent =
+          CollaboratorRevokedEvent.parse(isbAlert);
+        const collaboratorRevokedContext = {
+          webAppUrl: this.webAppUrl,
+          destination: {
+            to: [collaboratorRevokedEvent.Detail.collaboratorEmail],
+          },
+        };
+        await this.sendEmail(
+          EmailTemplates.CollaboratorRevoked(
+            collaboratorRevokedEvent,
+            collaboratorRevokedContext,
           ),
         );
         break;
