@@ -41,6 +41,13 @@ export const authorizationMap: AuthorizationMapType = {
   "/leases/{param}/unfreeze": {
     POST: ["Manager", "Admin"],
   },
+  "/leases/{param}/collaborators": {
+    GET: ["User", "Manager", "Admin"],
+    POST: ["User", "Manager", "Admin"],
+  },
+  "/leases/{param}/collaborators/{param}": {
+    DELETE: ["User", "Manager", "Admin"],
+  },
   "/leases/{param}/extend": {
     POST: ["User", "Manager", "Admin"],
   },
