@@ -99,6 +99,7 @@ export function getSharedSsmParamValues(
       accountTable: sharedJsonParamResolver.accountTable,
       leaseTemplateTable: sharedJsonParamResolver.leaseTemplateTable,
       leaseTable: sharedJsonParamResolver.leaseTable,
+      leaseCollaboratorTable: sharedJsonParamResolver.leaseCollaboratorTable,
       blueprintTable: sharedJsonParamResolver.blueprintTable,
       tableKmsKeyId: sharedJsonParamResolver.tableKmsKeyId,
       solutionVersion: sharedJsonParamResolver.dataSolutionVersion,

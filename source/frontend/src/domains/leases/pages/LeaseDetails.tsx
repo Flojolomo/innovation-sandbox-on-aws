@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {
+  Box,
   Button,
   Header,
   SpaceBetween,
@@ -15,6 +16,7 @@ import { ContentLayout } from "@amzn/innovation-sandbox-frontend/components/Cont
 import { ErrorPanel } from "@amzn/innovation-sandbox-frontend/components/ErrorPanel";
 import { Loader } from "@amzn/innovation-sandbox-frontend/components/Loader";
 import { Markdown } from "@amzn/innovation-sandbox-frontend/components/Markdown";
+import { CollaboratorsList } from "@amzn/innovation-sandbox-frontend/domains/leases/components/CollaboratorsList";
 import { LeaseSummary } from "@amzn/innovation-sandbox-frontend/domains/leases/components/LeaseSummary";
 import { PendingExtensionInfo } from "@amzn/innovation-sandbox-frontend/domains/leases/components/PendingExtensionInfo";
 import { RequestExtensionModal } from "@amzn/innovation-sandbox-frontend/domains/leases/components/RequestExtensionModal";
@@ -123,32 +125,37 @@ export const LeaseDetails = () => {
         </Header>
       }
     >
-      <SpaceBetween size="l">
-        {isMonitoredLease(lease) && lease.pendingExtensionRequest && (
-          <PendingExtensionInfo
-            pendingExtensionRequest={lease.pendingExtensionRequest}
+      <Box padding={{ bottom: "xl" }}>
+        <SpaceBetween size="l">
+          {isMonitoredLease(lease) && lease.pendingExtensionRequest && (
+            <PendingExtensionInfo
+              pendingExtensionRequest={lease.pendingExtensionRequest}
+            />
+          )}
+          <LeaseSummary
+            lease={lease}
+            showEditButtons={showEditButtons}
+            onEditBudget={
+              showEditButtons
+                ? () => navigate(`/leases/${leaseId}/edit/budget`)
+                : undefined
+            }
+            onEditDuration={
+              showEditButtons
+                ? () => navigate(`/leases/${leaseId}/edit/duration`)
+                : undefined
+            }
+            onEditCostReport={
+              showEditButtons
+                ? () => navigate(`/leases/${leaseId}/edit/cost-report`)
+                : undefined
+            }
           />
-        )}
-        <LeaseSummary
-          lease={lease}
-          showEditButtons={showEditButtons}
-          onEditBudget={
-            showEditButtons
-              ? () => navigate(`/leases/${leaseId}/edit/budget`)
-              : undefined
-          }
-          onEditDuration={
-            showEditButtons
-              ? () => navigate(`/leases/${leaseId}/edit/duration`)
-              : undefined
-          }
-          onEditCostReport={
-            showEditButtons
-              ? () => navigate(`/leases/${leaseId}/edit/cost-report`)
-              : undefined
-          }
-        />
-      </SpaceBetween>
+          {isMonitoredLease(lease) && (
+            <CollaboratorsList leaseId={leaseId!} leaseStatus={lease.status} />
+          )}
+        </SpaceBetween>
+      </Box>
     </ContentLayout>
   );
 };

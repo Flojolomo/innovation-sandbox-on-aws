@@ -18,6 +18,8 @@ import { DynamoLeaseTemplateStore } from "@amzn/innovation-sandbox-commons/data/
 import { LeaseTemplateStore } from "@amzn/innovation-sandbox-commons/data/lease-template/lease-template-store.js";
 import { DynamoLeaseStore } from "@amzn/innovation-sandbox-commons/data/lease/dynamo-lease-store.js";
 import { LeaseStore } from "@amzn/innovation-sandbox-commons/data/lease/lease-store.js";
+import { DynamoLeaseCollaboratorStore } from "@amzn/innovation-sandbox-commons/data/lease-collaborator/dynamo-lease-collaborator-store.js";
+import { LeaseCollaboratorStore } from "@amzn/innovation-sandbox-commons/data/lease-collaborator/lease-collaborator-store.js";
 import { DynamoSandboxAccountStore } from "@amzn/innovation-sandbox-commons/data/sandbox-account/dynamo-sandbox-account-store.js";
 import { SandboxAccountStore } from "@amzn/innovation-sandbox-commons/data/sandbox-account/sandbox-account-store.js";
 import { BlueprintDeploymentService } from "@amzn/innovation-sandbox-commons/isb-services/blueprint-deployment-service.js";
@@ -42,6 +44,11 @@ import {
 export namespace ServiceEnv {
   export type leaseStore = {
     LEASE_TABLE_NAME: string;
+    USER_AGENT_EXTRA: string;
+  };
+
+  export type leaseCollaboratorStore = {
+    LEASE_COLLABORATOR_TABLE_NAME: string;
     USER_AGENT_EXTRA: string;
   };
 
@@ -128,6 +135,15 @@ export class IsbServices {
     return new DynamoLeaseStore({
       client: IsbClients.dynamo(env),
       leaseTableName: env.LEASE_TABLE_NAME,
+    });
+  }
+
+  public static leaseCollaboratorStore(
+    env: ServiceEnv.leaseCollaboratorStore,
+  ): LeaseCollaboratorStore {
+    return new DynamoLeaseCollaboratorStore({
+      client: IsbClients.dynamo(env),
+      leaseCollaboratorTableName: env.LEASE_COLLABORATOR_TABLE_NAME,
     });
   }
 

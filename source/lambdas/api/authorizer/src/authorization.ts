@@ -77,6 +77,31 @@ export function extractMethodAndPathFromArnWithPathParameterMiddle(
 }
 
 /**
+ * extracts the method and the path from the given method arn assuming the second and last path
+ * segments are path parameters and replaces them both with {param} as expected by the authorizationMap
+ * @param arn sample value arn:aws:execute-api:us-east-1:123456789012:aaaaaaaaaa/prod/DELETE/leases/{leaseId}/collaborators/{email}
+ */
+export function extractMethodAndPathFromArnWithTwoPathParameters(
+  arn: string,
+): { method: HttpMethod; path: string } | null {
+  const parts = arn.replace(/\/$/, "").split("/");
+  if (parts.length >= 7) {
+    return {
+      method: parts[2]! as HttpMethod,
+      path:
+        "/" +
+        [
+          parts[3]!,
+          "{param}",
+          ...parts.slice(5, parts.length - 1),
+          "{param}",
+        ].join("/"),
+    };
+  }
+  return null;
+}
+
+/**
  * extracts the method and the path from the given method arn assuming the entry third from the end is the path
  * parameter and replaces it with {param} as expected by the authorizationMap
  * @param arn sample value arn:aws:execute-api:us-east-1:123456789012:aaaaaaaaaa/prod/POST/leases/{uuid}/extend/review
@@ -191,6 +216,14 @@ export async function isAuthorized(
       ...getAllowedRolesForUrlPattern(
         props,
         extractMethodAndPathFromArnWithPathParameterThirdFromEnd,
+      ),
+    );
+  }
+  if (allowedRoles.length === 0) {
+    allowedRoles.push(
+      ...getAllowedRolesForUrlPattern(
+        props,
+        extractMethodAndPathFromArnWithTwoPathParameters,
       ),
     );
   }

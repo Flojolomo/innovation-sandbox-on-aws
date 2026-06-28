@@ -29,6 +29,7 @@ export class IsbDataResources {
   sandboxAccountTable: Table;
   leaseTemplateTable: Table;
   leaseTable: Table;
+  leaseCollaboratorTable: Table;
   blueprintTable: Table;
 
   constructor(scope: Construct, props: IsbDataResourcesProps) {
@@ -91,6 +92,24 @@ export class IsbDataResources {
       },
     });
 
+    this.leaseCollaboratorTable = new Table(scope, "LeaseCollaboratorTable", {
+      partitionKey: { name: "leaseUuid", type: AttributeType.STRING },
+      sortKey: { name: "collaboratorEmail", type: AttributeType.STRING },
+      billingMode: BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      encryption: TableEncryption.CUSTOMER_MANAGED,
+      encryptionKey: this.tableKmsKey,
+      deletionProtection: !devMode,
+      removalPolicy: tableRemovalPolicy,
+    });
+    this.leaseCollaboratorTable.addGlobalSecondaryIndex({
+      indexName: "CollaboratorEmailIndex",
+      partitionKey: {
+        name: "collaboratorEmail",
+        type: AttributeType.STRING,
+      },
+    });
+
     this.blueprintTable = new Table(scope, "BlueprintTable", {
       partitionKey: { name: "PK", type: AttributeType.STRING }, // "bp#{blueprintId}"
       sortKey: { name: "SK", type: AttributeType.STRING }, // "blueprint" | "stackset#{stackSetId}" | "deployment#{timestamp}#{operationId}"
@@ -125,6 +144,7 @@ export class IsbDataResources {
         accountTable: this.sandboxAccountTable.tableName,
         leaseTemplateTable: this.leaseTemplateTable.tableName,
         leaseTable: this.leaseTable.tableName,
+        leaseCollaboratorTable: this.leaseCollaboratorTable.tableName,
         blueprintTable: this.blueprintTable.tableName,
         tableKmsKeyId: this.tableKmsKey.keyId,
         solutionVersion: getContextFromMapping(scope, "version"),
