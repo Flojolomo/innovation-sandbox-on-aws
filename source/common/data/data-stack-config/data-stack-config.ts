@@ -16,6 +16,7 @@ export const DataConfigSchema = z.object({
   accountTable: z.string(),
   leaseTemplateTable: z.string(),
   leaseTable: z.string(),
+  leaseCollaboratorTable: z.string(),
   blueprintTable: z.string(),
   tableKmsKeyId: z.string(),
   solutionVersion: z.string(),

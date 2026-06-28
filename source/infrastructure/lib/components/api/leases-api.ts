@@ -37,6 +37,7 @@ export class LeasesApi {
       reportingConfigConfigurationProfileId,
       leaseTemplateTable,
       leaseTable,
+      leaseCollaboratorTable,
       accountTable,
     } = IsbComputeStack.sharedSpokeConfig.data;
 
@@ -71,6 +72,7 @@ export class LeasesApi {
           ACCOUNT_TABLE_NAME: accountTable,
           LEASE_TABLE_NAME: leaseTable,
           LEASE_TEMPLATE_TABLE_NAME: leaseTemplateTable,
+          LEASE_COLLABORATOR_TABLE_NAME: leaseCollaboratorTable,
           ISB_EVENT_BUS: props.isbEventBus.eventBusName,
           INTERMEDIATE_ROLE_ARN: IntermediateRole.getRoleArn(),
           IDC_ROLE_ARN: getIdcRoleArn(
@@ -112,6 +114,7 @@ export class LeasesApi {
       leasesLambdaFunction,
       leaseTable,
       leaseTemplateTable,
+      leaseCollaboratorTable,
       accountTable,
       IsbComputeStack.sharedSpokeConfig.data.blueprintTable,
     );
@@ -186,5 +189,14 @@ export class LeasesApi {
 
     const leaseTerminateResource = leaseIdResource.addResource("terminate");
     leaseTerminateResource.addMethod("POST");
+
+    const leaseCollaboratorsResource =
+      leaseIdResource.addResource("collaborators");
+    leaseCollaboratorsResource.addMethod("GET");
+    leaseCollaboratorsResource.addMethod("POST");
+
+    const leaseCollaboratorEmailResource =
+      leaseCollaboratorsResource.addResource("{collaboratorEmail}");
+    leaseCollaboratorEmailResource.addMethod("DELETE");
   }
 }

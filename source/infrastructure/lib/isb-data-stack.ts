@@ -85,5 +85,11 @@ export class IsbDataStack extends Stack {
       key: `LeaseTable`,
       value: dataResources.leaseTable.tableName,
     });
+
+    new CfnOutput(this, "LeaseCollaboratorTableOut", {
+      exportName: `${this.stackName}-LeaseCollaboratorTable`,
+      key: `LeaseCollaboratorTable`,
+      value: dataResources.leaseCollaboratorTable.tableName,
+    });
   }
 }

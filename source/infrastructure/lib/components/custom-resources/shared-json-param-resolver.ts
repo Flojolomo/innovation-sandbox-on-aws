@@ -45,6 +45,7 @@ export class SharedJsonParamResolver extends Construct {
   public readonly accountTable: string;
   public readonly leaseTemplateTable: string;
   public readonly leaseTable: string;
+  public readonly leaseCollaboratorTable: string;
   public readonly blueprintTable: string;
   public readonly tableKmsKeyId: string;
   public readonly dataSolutionVersion: string;
@@ -175,6 +176,8 @@ export class SharedJsonParamResolver extends Construct {
       sharedJsonParamCR.customResource.getAttString("leaseTemplateTable");
     this.leaseTable =
       sharedJsonParamCR.customResource.getAttString("leaseTable");
+    this.leaseCollaboratorTable =
+      sharedJsonParamCR.customResource.getAttString("leaseCollaboratorTable");
     this.blueprintTable =
       sharedJsonParamCR.customResource.getAttString("blueprintTable");
     this.tableKmsKeyId =
