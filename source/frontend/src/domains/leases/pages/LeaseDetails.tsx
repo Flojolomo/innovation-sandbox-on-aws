@@ -1,7 +1,12 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { Button, Header, SpaceBetween } from "@cloudscape-design/components";
+import {
+  Box,
+  Button,
+  Header,
+  SpaceBetween,
+} from "@cloudscape-design/components";
 import { useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -120,35 +125,37 @@ export const LeaseDetails = () => {
         </Header>
       }
     >
-      <SpaceBetween size="l">
-        {isMonitoredLease(lease) && lease.pendingExtensionRequest && (
-          <PendingExtensionInfo
-            pendingExtensionRequest={lease.pendingExtensionRequest}
+      <Box padding={{ bottom: "xl" }}>
+        <SpaceBetween size="l">
+          {isMonitoredLease(lease) && lease.pendingExtensionRequest && (
+            <PendingExtensionInfo
+              pendingExtensionRequest={lease.pendingExtensionRequest}
+            />
+          )}
+          <LeaseSummary
+            lease={lease}
+            showEditButtons={showEditButtons}
+            onEditBudget={
+              showEditButtons
+                ? () => navigate(`/leases/${leaseId}/edit/budget`)
+                : undefined
+            }
+            onEditDuration={
+              showEditButtons
+                ? () => navigate(`/leases/${leaseId}/edit/duration`)
+                : undefined
+            }
+            onEditCostReport={
+              showEditButtons
+                ? () => navigate(`/leases/${leaseId}/edit/cost-report`)
+                : undefined
+            }
           />
-        )}
-        <LeaseSummary
-          lease={lease}
-          showEditButtons={showEditButtons}
-          onEditBudget={
-            showEditButtons
-              ? () => navigate(`/leases/${leaseId}/edit/budget`)
-              : undefined
-          }
-          onEditDuration={
-            showEditButtons
-              ? () => navigate(`/leases/${leaseId}/edit/duration`)
-              : undefined
-          }
-          onEditCostReport={
-            showEditButtons
-              ? () => navigate(`/leases/${leaseId}/edit/cost-report`)
-              : undefined
-          }
-        />
-        {isMonitoredLease(lease) && (
-          <CollaboratorsList leaseId={leaseId!} leaseStatus={lease.status} />
-        )}
-      </SpaceBetween>
+          {isMonitoredLease(lease) && (
+            <CollaboratorsList leaseId={leaseId!} leaseStatus={lease.status} />
+          )}
+        </SpaceBetween>
+      </Box>
     </ContentLayout>
   );
 };

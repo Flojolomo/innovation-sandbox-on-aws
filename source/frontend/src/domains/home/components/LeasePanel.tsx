@@ -27,6 +27,7 @@ import {
   showErrorToast,
   showSuccessToast,
 } from "@amzn/innovation-sandbox-frontend/components/Toast";
+import { CollaboratorsList } from "@amzn/innovation-sandbox-frontend/domains/leases/components/CollaboratorsList";
 import { InviteCollaboratorModal } from "@amzn/innovation-sandbox-frontend/domains/leases/components/InviteCollaboratorModal";
 import { LeaseStatusBadge } from "@amzn/innovation-sandbox-frontend/domains/leases/components/LeaseStatusBadge";
 import { RequestExtensionModal } from "@amzn/innovation-sandbox-frontend/domains/leases/components/RequestExtensionModal";
@@ -207,6 +208,12 @@ export const LeasePanel = ({ lease }: LeasePanelProps) => {
             </SpaceBetween>
           </Box>
         </ColumnLayout>
+        {isMonitoredLease(lease) && (
+          <CollaboratorsList
+            leaseId={lease.leaseId}
+            leaseStatus={lease.status}
+          />
+        )}
       </SpaceBetween>
     </Container>
   );
