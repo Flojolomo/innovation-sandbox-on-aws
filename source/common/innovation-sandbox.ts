@@ -5,6 +5,8 @@ import { Logger } from "@aws-lambda-powertools/logger";
 import { BlueprintStore } from "@amzn/innovation-sandbox-commons/data/blueprint/blueprint-store.js";
 import { PutResult } from "@amzn/innovation-sandbox-commons/data/common-types.js";
 import { GlobalConfig } from "@amzn/innovation-sandbox-commons/data/global-config/global-config.js";
+import { LeaseCollaboratorStore } from "@amzn/innovation-sandbox-commons/data/lease-collaborator/lease-collaborator-store.js";
+import { LeaseCollaborator } from "@amzn/innovation-sandbox-commons/data/lease-collaborator/lease-collaborator.js";
 import { LeaseTemplateStore } from "@amzn/innovation-sandbox-commons/data/lease-template/lease-template-store.js";
 import { LeaseTemplate } from "@amzn/innovation-sandbox-commons/data/lease-template/lease-template.js";
 import { LeaseStore } from "@amzn/innovation-sandbox-commons/data/lease/lease-store.js";
@@ -20,10 +22,6 @@ import {
   MonitoredLeaseStatusSchema,
   PendingLease,
 } from "@amzn/innovation-sandbox-commons/data/lease/lease.js";
-import { LeaseCollaboratorStore } from "@amzn/innovation-sandbox-commons/data/lease-collaborator/lease-collaborator-store.js";
-import {
-  LeaseCollaborator,
-} from "@amzn/innovation-sandbox-commons/data/lease-collaborator/lease-collaborator.js";
 import { SandboxAccountStore } from "@amzn/innovation-sandbox-commons/data/sandbox-account/sandbox-account-store.js";
 import {
   IsbOu,
@@ -40,6 +38,9 @@ import { CollaboratorInvitedEvent } from "@amzn/innovation-sandbox-commons/event
 import { CollaboratorRevokedEvent } from "@amzn/innovation-sandbox-commons/events/collaborator-revoked-event.js";
 import { LeaseApprovedEvent } from "@amzn/innovation-sandbox-commons/events/lease-approved-event.js";
 import { LeaseDeniedEvent } from "@amzn/innovation-sandbox-commons/events/lease-denied-event.js";
+import { LeaseExtensionApprovedEvent } from "@amzn/innovation-sandbox-commons/events/lease-extension-approved-event.js";
+import { LeaseExtensionDeniedEvent } from "@amzn/innovation-sandbox-commons/events/lease-extension-denied-event.js";
+import { LeaseExtensionRequestedEvent } from "@amzn/innovation-sandbox-commons/events/lease-extension-requested-event.js";
 import {
   LeaseFrozenEvent,
   LeaseFrozenReason,
@@ -90,6 +91,9 @@ export class CollaboratorAlreadyExistsError extends InnovationSandboxError {}
 export class CannotInviteSelfError extends InnovationSandboxError {}
 export class LeaseNotActiveError extends InnovationSandboxError {}
 export class CollaboratorNotFoundError extends InnovationSandboxError {}
+export class LeaseExtensionExceedsMaxDurationError extends InnovationSandboxError {}
+export class LeaseExtensionAlreadyPendingError extends InnovationSandboxError {}
+export class LeaseExtensionDateNotInFutureError extends InnovationSandboxError {}
 
 export type IsbContext<T extends { [key: string]: any }> = T & {
   logger: Logger;
@@ -1047,6 +1051,175 @@ export class InnovationSandbox {
     );
   }
 
+  @logErrors
+  public static async requestLeaseExtension(
+    props: {
+      lease: MonitoredLease;
+      requestedExpirationDate: string;
+      comments?: string;
+      user: IsbUser;
+    },
+    context: IsbContext<{
+      leaseStore: LeaseStore;
+      isbEventBridgeClient: IsbEventBridgeClient;
+      globalConfig: GlobalConfig;
+    }>,
+  ) {
+    const { lease, requestedExpirationDate, comments, user } = props;
+    const { logger, tracer, leaseStore, isbEventBridgeClient, globalConfig } =
+      context;
+
+    addCorrelationContext(logger, searchableLeaseProperties(lease));
+
+    // Guard: reject if there is already a pending extension request
+    if (lease.pendingExtensionRequest) {
+      throw new LeaseExtensionAlreadyPendingError(
+        "A lease extension request is already pending. Please wait for it to be reviewed before submitting a new one.",
+      );
+    }
+
+    // Validate that requested expiration is in the future
+    const requestedExpiration = parseDatetime(requestedExpirationDate);
+    if (requestedExpiration <= now()) {
+      throw new LeaseExtensionDateNotInFutureError(
+        "Requested expiration date must be in the future.",
+      );
+    }
+
+    // Validate that requested expiration is after the current expiration date
+    if (lease.expirationDate) {
+      const currentExpiration = parseDatetime(lease.expirationDate);
+      if (requestedExpiration <= currentExpiration) {
+        throw new LeaseExtensionDateNotInFutureError(
+          "Requested expiration date must be after the current lease expiration date.",
+        );
+      }
+    }
+
+    // Validate that requested expiration does not exceed maxDurationHours from startDate
+    const startDate = parseDatetime(lease.startDate);
+    const durationInHours = requestedExpiration.diff(startDate, "hours").hours;
+
+    if (durationInHours > globalConfig.leases.maxDurationHours) {
+      throw new LeaseExtensionExceedsMaxDurationError(
+        `Requested extension exceeds the maximum allowed duration of ${globalConfig.leases.maxDurationHours} hours from the lease start date.`,
+      );
+    }
+
+    // Store pending extension request on the lease with optimistic concurrency
+    await leaseStore.update(
+      {
+        ...lease,
+        pendingExtensionRequest: {
+          requestedExpirationDate,
+          ...(comments !== undefined && { comments }),
+          requestedAt: nowAsIsoDatetimeString(),
+          requestedBy: user.email,
+        },
+      },
+      lease,
+    );
+
+    await isbEventBridgeClient.sendIsbEvent(
+      tracer,
+      new LeaseExtensionRequestedEvent({
+        leaseId: {
+          userEmail: lease.userEmail,
+          uuid: lease.uuid,
+        },
+        userEmail: lease.userEmail,
+        requestedExpirationDate,
+        comments,
+      }),
+    );
+
+    logger.info(
+      `Lease extension requested for (${lease.userEmail}) lease (${lease.uuid}). Requested expiration: ${requestedExpirationDate}`,
+    );
+  }
+
+  @logErrors
+  public static async approveLeaseExtension(
+    props: {
+      lease: MonitoredLease;
+      approver: string;
+      requestedExpirationDate: string;
+    },
+    context: IsbContext<{
+      leaseStore: LeaseStore;
+      isbEventBridgeClient: IsbEventBridgeClient;
+    }>,
+  ) {
+    const { lease, approver, requestedExpirationDate } = props;
+    const { logger, tracer, leaseStore, isbEventBridgeClient } = context;
+
+    addCorrelationContext(logger, searchableLeaseProperties(lease));
+
+    const { pendingExtensionRequest: _, ...leaseWithoutExtension } = lease;
+    const updatedLease = await leaseStore.update({
+      ...leaseWithoutExtension,
+      expirationDate: requestedExpirationDate,
+    });
+
+    await isbEventBridgeClient.sendIsbEvent(
+      tracer,
+      new LeaseExtensionApprovedEvent({
+        leaseId: {
+          userEmail: lease.userEmail,
+          uuid: lease.uuid,
+        },
+        userEmail: lease.userEmail,
+        approvedBy: approver,
+        newExpirationDate: requestedExpirationDate,
+      }),
+    );
+
+    logger.info(
+      `Lease extension approved for (${lease.userEmail}) lease (${lease.uuid}) by (${approver}). New expiration: ${requestedExpirationDate}`,
+    );
+
+    return updatedLease;
+  }
+
+  @logErrors
+  public static async denyLeaseExtension(
+    props: {
+      lease: MonitoredLease;
+      denier: IsbUser;
+      comments?: string;
+    },
+    context: IsbContext<{
+      leaseStore: LeaseStore;
+      isbEventBridgeClient: IsbEventBridgeClient;
+    }>,
+  ) {
+    const { lease, denier, comments } = props;
+    const { logger, tracer, leaseStore, isbEventBridgeClient } = context;
+
+    addCorrelationContext(logger, searchableLeaseProperties(lease));
+
+    // Clear pending extension request by omitting it from the updated lease
+    const { pendingExtensionRequest: _, ...leaseWithoutExtension } = lease;
+    await leaseStore.update(leaseWithoutExtension);
+
+    await isbEventBridgeClient.sendIsbEvent(
+      tracer,
+      new LeaseExtensionDeniedEvent({
+        leaseId: {
+          userEmail: lease.userEmail,
+          uuid: lease.uuid,
+        },
+        userEmail: lease.userEmail,
+        deniedBy: denier.email,
+        comments,
+      }),
+    );
+
+    logger.info(
+      `Lease extension denied for (${lease.userEmail}) lease (${lease.uuid}) by (${denier.email})`,
+    );
+  }
+
   /**
    * Eject an account from the solution. This will remove the account from the AccountPool WITHOUT passing it
    * through any additional cleanup steps. The account will be placed into the Exit OU EXACTLY AS IS
@@ -1264,8 +1437,13 @@ export class InnovationSandbox {
     }>,
   ): Promise<LeaseCollaborator> {
     const { lease, collaborator, invitedBy } = props;
-    const { logger, tracer, leaseCollaboratorStore, idcService, eventBridgeClient } =
-      context;
+    const {
+      logger,
+      tracer,
+      leaseCollaboratorStore,
+      idcService,
+      eventBridgeClient,
+    } = context;
 
     addCorrelationContext(logger, searchableLeaseProperties(lease));
 
@@ -1368,8 +1546,13 @@ export class InnovationSandbox {
     }>,
   ): Promise<void> {
     const { lease, collaboratorEmail, revokedBy, reason } = props;
-    const { logger, tracer, leaseCollaboratorStore, idcService, eventBridgeClient } =
-      context;
+    const {
+      logger,
+      tracer,
+      leaseCollaboratorStore,
+      idcService,
+      eventBridgeClient,
+    } = context;
 
     addCorrelationContext(logger, searchableLeaseProperties(lease));
 
@@ -1385,9 +1568,13 @@ export class InnovationSandbox {
     }
 
     // Revoke IDC access for the collaborator
-    const collaboratorUser = await idcService.getUserFromEmail(collaboratorEmail);
+    const collaboratorUser =
+      await idcService.getUserFromEmail(collaboratorEmail);
     if (collaboratorUser) {
-      await idcService.revokeSingleUserAccess(lease.awsAccountId, collaboratorUser);
+      await idcService.revokeSingleUserAccess(
+        lease.awsAccountId,
+        collaboratorUser,
+      );
     }
 
     // Mark the collaborator as revoked
@@ -1446,14 +1633,19 @@ export class InnovationSandbox {
     }>,
   ): Promise<void> {
     const { lease, reason, revokedBy } = props;
-    const { logger, tracer, leaseCollaboratorStore, eventBridgeClient } = context;
+    const { logger, tracer, leaseCollaboratorStore, eventBridgeClient } =
+      context;
 
     addCorrelationContext(logger, searchableLeaseProperties(lease));
 
     const activeCollaborators = await collect(
-      stream(leaseCollaboratorStore, leaseCollaboratorStore.findActiveByLeaseUuid, {
-        leaseUuid: lease.uuid,
-      }),
+      stream(
+        leaseCollaboratorStore,
+        leaseCollaboratorStore.findActiveByLeaseUuid,
+        {
+          leaseUuid: lease.uuid,
+        },
+      ),
     );
 
     for (const collaborator of activeCollaborators) {
@@ -1509,8 +1701,13 @@ export class InnovationSandbox {
     }>,
   ): Promise<void> {
     const { lease } = props;
-    const { logger, tracer, leaseCollaboratorStore, idcService, eventBridgeClient } =
-      context;
+    const {
+      logger,
+      tracer,
+      leaseCollaboratorStore,
+      idcService,
+      eventBridgeClient,
+    } = context;
 
     addCorrelationContext(logger, searchableLeaseProperties(lease));
 

@@ -26,4 +26,7 @@ export const EventDetailTypes = {
   LeaseProvisioningFailed: "LeaseProvisioningFailed",
   CollaboratorInvited: "CollaboratorInvited",
   CollaboratorRevoked: "CollaboratorRevoked",
+  LeaseExtensionRequested: "LeaseExtensionRequested",
+  LeaseExtensionApproved: "LeaseExtensionApproved",
+  LeaseExtensionDenied: "LeaseExtensionDenied",
 } as const;

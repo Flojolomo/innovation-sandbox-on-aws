@@ -15,17 +15,20 @@ import {
   base64DecodeCompositeKey,
   base64EncodeCompositeKey,
 } from "@amzn/innovation-sandbox-commons/data/encoding.js";
-import { UnknownItem } from "@amzn/innovation-sandbox-commons/data/errors.js";
+import {
+  ConcurrentDataModificationException,
+  UnknownItem,
+} from "@amzn/innovation-sandbox-commons/data/errors.js";
 import {
   validateLeaseCompliesWithGlobalConfig,
   ValidationException,
 } from "@amzn/innovation-sandbox-commons/data/global-config/global-config-utils.js";
 import { LeaseTemplateStore } from "@amzn/innovation-sandbox-commons/data/lease-template/lease-template-store.js";
 import {
+  isActiveLease,
   isFrozenLease,
   isMonitoredLease,
   isPendingLease,
-  isActiveLease,
   Lease,
   LeaseKeySchema,
   MonitoredLeaseSchema,
@@ -43,6 +46,9 @@ import {
   CouldNotRetrieveUserError,
   InnovationSandbox,
   IsbContext,
+  LeaseExtensionAlreadyPendingError,
+  LeaseExtensionDateNotInFutureError,
+  LeaseExtensionExceedsMaxDurationError,
   LeaseNotActiveError,
   MaxNumberOfLeasesExceededError,
   NoAccountsAvailableError,
@@ -153,6 +159,20 @@ const routes: Route<IsbApiEvent, APIGatewayProxyResult>[] = [
     path: "/leases/{leaseId}/collaborators/{collaboratorEmail}",
     method: "DELETE",
     handler: middyFactory().handler(revokeCollaboratorHandler),
+  },
+  {
+    path: "/leases/{leaseId}/extend",
+    method: "POST",
+    handler: middyFactory()
+      .use(httpJsonBodyParser())
+      .handler(requestLeaseExtensionHandler),
+  },
+  {
+    path: "/leases/{leaseId}/extend/review",
+    method: "POST",
+    handler: middyFactory()
+      .use(httpJsonBodyParser())
+      .handler(reviewLeaseExtensionHandler),
   },
 ];
 
@@ -924,6 +944,20 @@ async function terminateLeaseHandler(
     });
   }
 
+  // Validate user owns the lease or has Admin/Manager role
+  if (isUserNotAllowedByEmail(context.user, lease.userEmail)) {
+    throw createHttpJSendError({
+      statusCode: 403,
+      data: {
+        errors: [
+          {
+            message: `User is not authorized to terminate this lease.`,
+          },
+        ],
+      },
+    });
+  }
+
   try {
     await InnovationSandbox.terminateLease(
       { lease, expiredStatus: "ManuallyTerminated" },
@@ -1049,6 +1083,289 @@ async function unfreezeLeaseHandler(
   }
 }
 
+async function requestLeaseExtensionHandler(
+  event: IsbApiEvent,
+  context: ContextWithGlobalAndReportingConfig &
+    IsbApiContext<LeaseLambdaEnvironment>,
+): Promise<APIGatewayProxyResult> {
+  const isbContext = {
+    logger,
+    tracer,
+    leaseStore: IsbServices.leaseStore(context.env),
+    isbEventBridgeClient: IsbServices.isbEventBridge(context.env),
+    globalConfig: context.globalConfig,
+  };
+
+  const RequestLeaseExtensionBodySchema = z
+    .object({
+      requestedExpirationDate: z.string().datetime(),
+      comments: z.string().max(1000).optional(),
+    })
+    .strict();
+
+  const parsedBody = RequestLeaseExtensionBodySchema.safeParse(event.body);
+  if (!parsedBody.success) {
+    throw createHttpJSendValidationError(parsedBody.error);
+  }
+
+  const leaseCompositeKey = parseLeaseCompositeKeyFromPathParameters(
+    event.pathParameters,
+  );
+  const leaseResponse = await isbContext.leaseStore.get(leaseCompositeKey);
+  const lease = leaseResponse.result;
+  if (leaseResponse.error) {
+    logger.warn(
+      `Error retrieving lease ${leaseCompositeKey}: ${leaseResponse.error}`,
+    );
+  }
+
+  if (!lease) {
+    throw createHttpJSendError({
+      statusCode: 404,
+      data: {
+        errors: [
+          {
+            message: `Lease not found.`,
+          },
+        ],
+      },
+    });
+  }
+
+  if (!isMonitoredLease(lease)) {
+    throw createHttpJSendError({
+      statusCode: 400,
+      data: {
+        errors: [
+          {
+            message: `Only active or frozen leases can be extended.`,
+          },
+        ],
+      },
+    });
+  }
+
+  // Validate user owns the lease or has Admin/Manager role
+  if (isUserNotAllowedByEmail(context.user, lease.userEmail)) {
+    throw createHttpJSendError({
+      statusCode: 403,
+      data: {
+        errors: [
+          {
+            message: `User is not authorized to request an extension for this lease.`,
+          },
+        ],
+      },
+    });
+  }
+
+  try {
+    await InnovationSandbox.requestLeaseExtension(
+      {
+        lease,
+        requestedExpirationDate: parsedBody.data.requestedExpirationDate,
+        comments: parsedBody.data.comments,
+        user: context.user,
+      },
+      isbContext,
+    );
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        status: "success",
+        data: null,
+      }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+    };
+  } catch (error) {
+    if (error instanceof LeaseExtensionExceedsMaxDurationError) {
+      throw createHttpJSendError({
+        statusCode: 400,
+        data: {
+          errors: [
+            {
+              message: error.message,
+            },
+          ],
+        },
+      });
+    } else if (error instanceof LeaseExtensionAlreadyPendingError) {
+      throw createHttpJSendError({
+        statusCode: 409,
+        data: {
+          errors: [
+            {
+              message: error.message,
+            },
+          ],
+        },
+      });
+    } else if (error instanceof ConcurrentDataModificationException) {
+      throw createHttpJSendError({
+        statusCode: 409,
+        data: {
+          errors: [
+            {
+              message: "The lease was modified concurrently. Please try again.",
+            },
+          ],
+        },
+      });
+    } else if (error instanceof LeaseExtensionDateNotInFutureError) {
+      throw createHttpJSendError({
+        statusCode: 400,
+        data: {
+          errors: [
+            {
+              message: error.message,
+            },
+          ],
+        },
+      });
+    } else {
+      throw error;
+    }
+  }
+}
+
+async function reviewLeaseExtensionHandler(
+  event: IsbApiEvent,
+  context: ContextWithGlobalAndReportingConfig &
+    IsbApiContext<LeaseLambdaEnvironment>,
+): Promise<APIGatewayProxyResult> {
+  const isbContext = {
+    logger,
+    tracer,
+    leaseStore: IsbServices.leaseStore(context.env),
+    isbEventBridgeClient: IsbServices.isbEventBridge(context.env),
+    globalConfig: context.globalConfig,
+  };
+
+  const ReviewLeaseExtensionBodySchema = z
+    .object({
+      action: z.enum(["Approve", "Deny"], {
+        errorMap: enumErrorMap,
+      }),
+      comments: z.string().max(1000).optional(),
+    })
+    .strict();
+
+  const parsedBody = ReviewLeaseExtensionBodySchema.safeParse(event.body);
+  if (!parsedBody.success) {
+    throw createHttpJSendValidationError(parsedBody.error);
+  }
+
+  // Require Admin/Manager role
+  if (!authorizedToLeaseFromPrivateLeaseTemplates(context.user)) {
+    throw createHttpJSendError({
+      statusCode: 403,
+      data: {
+        errors: [
+          {
+            message: `User is not authorized to review lease extension requests.`,
+          },
+        ],
+      },
+    });
+  }
+
+  const leaseCompositeKey = parseLeaseCompositeKeyFromPathParameters(
+    event.pathParameters,
+  );
+  const leaseResponse = await isbContext.leaseStore.get(leaseCompositeKey);
+  const lease = leaseResponse.result;
+  if (leaseResponse.error) {
+    logger.warn(
+      `Error retrieving lease ${leaseCompositeKey}: ${leaseResponse.error}`,
+    );
+  }
+
+  if (!lease) {
+    throw createHttpJSendError({
+      statusCode: 404,
+      data: {
+        errors: [
+          {
+            message: `Lease not found.`,
+          },
+        ],
+      },
+    });
+  }
+
+  if (!isMonitoredLease(lease)) {
+    throw createHttpJSendError({
+      statusCode: 400,
+      data: {
+        errors: [
+          {
+            message: `Only active or frozen leases can have extension requests reviewed.`,
+          },
+        ],
+      },
+    });
+  }
+
+  if (!lease.pendingExtensionRequest) {
+    throw createHttpJSendError({
+      statusCode: 400,
+      data: {
+        errors: [
+          {
+            message: `No pending extension request found for this lease.`,
+          },
+        ],
+      },
+    });
+  }
+
+  if (parsedBody.data.action === "Approve") {
+    const result = await InnovationSandbox.approveLeaseExtension(
+      {
+        lease,
+        approver: context.user.email,
+        requestedExpirationDate:
+          lease.pendingExtensionRequest.requestedExpirationDate,
+      },
+      isbContext,
+    );
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        status: "success",
+        data: result.newItem,
+      }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+    };
+  } else {
+    await InnovationSandbox.denyLeaseExtension(
+      {
+        lease,
+        denier: context.user,
+        comments: parsedBody.data.comments,
+      },
+      isbContext,
+    );
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        status: "success",
+        data: null,
+      }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+    };
+  }
+}
+
 function parseLeaseCompositeKeyFromPathParameters(
   pathParameters: APIGatewayProxyEventPathParameters,
 ) {
@@ -1096,7 +1413,9 @@ async function getCollaboratorsHandler(
     IsbApiContext<LeaseLambdaEnvironment>,
 ): Promise<APIGatewayProxyResult> {
   const leaseStore = IsbServices.leaseStore(context.env);
-  const leaseCollaboratorStore = IsbServices.leaseCollaboratorStore(context.env);
+  const leaseCollaboratorStore = IsbServices.leaseCollaboratorStore(
+    context.env,
+  );
 
   const leaseCompositeKey = parseLeaseCompositeKeyFromPathParameters(
     event.pathParameters,
@@ -1125,7 +1444,10 @@ async function getCollaboratorsHandler(
       statusCode: 403,
       data: {
         errors: [
-          { message: "User is not authorized to view collaborators for this lease." },
+          {
+            message:
+              "User is not authorized to view collaborators for this lease.",
+          },
         ],
       },
     });
@@ -1157,7 +1479,9 @@ async function inviteCollaboratorHandler(
     context.env,
     fromTemporaryIsbIdcCredentials(context.env),
   );
-  const leaseCollaboratorStore = IsbServices.leaseCollaboratorStore(context.env);
+  const leaseCollaboratorStore = IsbServices.leaseCollaboratorStore(
+    context.env,
+  );
   const eventBridgeClient = IsbServices.isbEventBridge(context.env);
 
   const InviteCollaboratorBodySchema = z
@@ -1200,7 +1524,10 @@ async function inviteCollaboratorHandler(
       statusCode: 403,
       data: {
         errors: [
-          { message: "User is not authorized to invite collaborators to this lease." },
+          {
+            message:
+              "User is not authorized to invite collaborators to this lease.",
+          },
         ],
       },
     });
@@ -1223,9 +1550,7 @@ async function inviteCollaboratorHandler(
     throw createHttpJSendError({
       statusCode: 404,
       data: {
-        errors: [
-          { message: "Collaborator not found in Identity Center." },
-        ],
+        errors: [{ message: "Collaborator not found in Identity Center." }],
       },
     });
   }
@@ -1294,7 +1619,9 @@ async function revokeCollaboratorHandler(
     context.env,
     fromTemporaryIsbIdcCredentials(context.env),
   );
-  const leaseCollaboratorStore = IsbServices.leaseCollaboratorStore(context.env);
+  const leaseCollaboratorStore = IsbServices.leaseCollaboratorStore(
+    context.env,
+  );
   const eventBridgeClient = IsbServices.isbEventBridge(context.env);
 
   const PathParametersSchema = z.object({
@@ -1347,7 +1674,10 @@ async function revokeCollaboratorHandler(
       statusCode: 403,
       data: {
         errors: [
-          { message: "User is not authorized to revoke collaborators from this lease." },
+          {
+            message:
+              "User is not authorized to revoke collaborators from this lease.",
+          },
         ],
       },
     });
@@ -1358,7 +1688,9 @@ async function revokeCollaboratorHandler(
       statusCode: 409,
       data: {
         errors: [
-          { message: "Collaborators can only be revoked from monitored leases." },
+          {
+            message: "Collaborators can only be revoked from monitored leases.",
+          },
         ],
       },
     });

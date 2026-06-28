@@ -198,5 +198,10 @@ export class LeasesApi {
     const leaseCollaboratorEmailResource =
       leaseCollaboratorsResource.addResource("{collaboratorEmail}");
     leaseCollaboratorEmailResource.addMethod("DELETE");
+    const leaseExtendResource = leaseIdResource.addResource("extend");
+    leaseExtendResource.addMethod("POST");
+
+    const leaseExtendReviewResource = leaseExtendResource.addResource("review");
+    leaseExtendReviewResource.addMethod("POST");
   }
 }

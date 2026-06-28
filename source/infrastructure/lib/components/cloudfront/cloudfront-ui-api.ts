@@ -38,6 +38,13 @@ import {
 } from "aws-cdk-lib/aws-cloudfront-origins";
 import { Effect, PolicyStatement, ServicePrincipal } from "aws-cdk-lib/aws-iam";
 import {
+  ARecord,
+  CfnRecordSet,
+  HostedZone,
+  RecordTarget,
+} from "aws-cdk-lib/aws-route53";
+import { CloudFrontTarget } from "aws-cdk-lib/aws-route53-targets";
+import {
   BlockPublicAccess,
   Bucket,
   BucketEncryption,
@@ -55,11 +62,16 @@ import { IsbLogGroups } from "@amzn/innovation-sandbox-infrastructure/components
 import { getContextFromMapping } from "@amzn/innovation-sandbox-infrastructure/helpers/cdk-context";
 import { addCfnGuardSuppression } from "@amzn/innovation-sandbox-infrastructure/helpers/cfn-guard";
 import { ConditionAspect } from "@amzn/innovation-sandbox-infrastructure/helpers/cfn-utils";
-import { isDevMode } from "@amzn/innovation-sandbox-infrastructure/helpers/deployment-mode";
+import { CustomDomainParameter } from "@amzn/innovation-sandbox-infrastructure/helpers/custom-domain-params";
+import {
+  getDeploymentMode,
+  isDevMode,
+} from "@amzn/innovation-sandbox-infrastructure/helpers/deployment-mode";
 
 export interface CloudFrontUiApiProps {
   restApi: ApiGatewayRestApi;
   namespace: string;
+  customDomain: CustomDomainParameter;
 }
 
 export class CloudfrontUiApi extends Construct {
@@ -328,11 +340,59 @@ export class CloudfrontUiApi extends Construct {
       ),
     );
 
+    // Conditionally configure custom domain on CloudFront distribution
+    // When custom domain parameters are provided, set Aliases and ViewerCertificate
+    const { customDomain } = props;
+    cfnDistribution.addPropertyOverride(
+      "DistributionConfig.Aliases",
+      Fn.conditionIf(
+        customDomain.isCustomDomainConfigured.logicalId,
+        [customDomain.domainNameParam.valueAsString],
+        Fn.ref("AWS::NoValue"),
+      ),
+    );
+    cfnDistribution.addPropertyOverride(
+      "DistributionConfig.ViewerCertificate",
+      Fn.conditionIf(
+        customDomain.isCustomDomainConfigured.logicalId,
+        {
+          AcmCertificateArn: customDomain.certificateArnParam.valueAsString,
+          SslSupportMethod: "sni-only",
+          MinimumProtocolVersion: "TLSv1.2_2019",
+        },
+        Fn.ref("AWS::NoValue"),
+      ),
+    );
+
+    // Create Route53 A record pointing to CloudFront distribution (conditional)
+    const dnsRecord = new ARecord(this, "IsbCustomDomainARecord", {
+      zone: HostedZone.fromHostedZoneAttributes(this, "IsbHostedZone", {
+        hostedZoneId: customDomain.hostedZoneIdParam.valueAsString,
+        zoneName: customDomain.domainNameParam.valueAsString,
+      }),
+      recordName: customDomain.domainNameParam.valueAsString,
+      target: RecordTarget.fromAlias(new CloudFrontTarget(distribution)),
+    });
+
+    // Apply condition so the Route53 record is only created when custom domain is configured
+    const cfnRecordSet = dnsRecord.node.defaultChild as CfnRecordSet;
+    cfnRecordSet.cfnOptions.condition = customDomain.isCustomDomainConfigured;
+
+    // Output the custom domain URL when configured
+    new CfnOutput(this, "CustomDomainUrl", {
+      key: "CustomDomainUrl",
+      value: `https://${customDomain.domainNameParam.valueAsString}`,
+      condition: customDomain.isCustomDomainConfigured,
+      description:
+        "The custom domain URL for the ISB application (only when custom domain is configured)",
+    });
+
     new BucketDeployment(this, "DeployIsbFrontEnd", {
       sources: [
         Source.asset(
           buildFrontend(
             path.join(__dirname, "..", "..", "..", "..", "frontend"),
+            getDeploymentMode(scope),
           ),
         ),
       ],
@@ -407,7 +467,7 @@ export class CloudfrontUiApi extends Construct {
 /**
  * Builds the frontend application at synth time and returns the dist path
  */
-function buildFrontend(frontendPath: string): string {
+function buildFrontend(frontendPath: string, deploymentMode: string): string {
   const distPath = path.join(frontendPath, "dist");
 
   if (existsSync(distPath)) {
@@ -422,6 +482,10 @@ function buildFrontend(frontendPath: string): string {
     execSync("npm run build", { // NOSONAR typescript:S4036 - only used in cdk synth process
       cwd: frontendPath,
       stdio: "inherit",
+      env: {
+        ...process.env,
+        VITE_DEPLOYMENT_MODE: deploymentMode,
+      },
     });
 
     console.log(`Frontend build completed successfully at ${distPath}`);
