@@ -114,6 +114,7 @@ const onCreateOrUpdate = async (
       accountTable: validatedDataConfig.accountTable,
       leaseTemplateTable: validatedDataConfig.leaseTemplateTable,
       leaseTable: validatedDataConfig.leaseTable,
+      leaseCollaboratorTable: validatedDataConfig.leaseCollaboratorTable,
       blueprintTable: validatedDataConfig.blueprintTable,
       tableKmsKeyId: validatedDataConfig.tableKmsKeyId,
       dataSolutionVersion: validatedDataConfig.solutionVersion,
