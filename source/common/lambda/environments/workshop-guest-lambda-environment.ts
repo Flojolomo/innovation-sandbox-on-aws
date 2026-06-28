@@ -12,6 +12,10 @@ export const WorkshopGuestLambdaEnvironmentSchema =
     IDC_CONFIG_PARAM_ARN: z.string(),
     INTERMEDIATE_ROLE_ARN: z.string(),
     IDC_ROLE_ARN: z.string(),
+    APP_CONFIG_APPLICATION_ID: z.string(),
+    APP_CONFIG_PROFILE_ID: z.string(),
+    APP_CONFIG_ENVIRONMENT_ID: z.string(),
+    AWS_APPCONFIG_EXTENSION_PREFETCH_LIST: z.string(),
   });
 
 export type WorkshopGuestLambdaEnvironment = z.infer<

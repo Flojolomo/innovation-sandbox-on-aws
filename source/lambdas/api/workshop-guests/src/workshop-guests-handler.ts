@@ -10,6 +10,7 @@ import {
   CleanupWorkshopGuestsRequestSchema,
   OnboardWorkshopGuestsRequestSchema,
 } from "@amzn/innovation-sandbox-commons/data/workshop-guest/workshop-guest.js";
+import { IsbServices } from "@amzn/innovation-sandbox-commons/isb-services/index.js";
 import { WorkshopGuestService } from "@amzn/innovation-sandbox-commons/isb-services/workshop-guest-service.js";
 import {
   WorkshopGuestLambdaEnvironment,
@@ -24,18 +25,21 @@ import {
   createHttpJSendValidationError,
 } from "@amzn/innovation-sandbox-commons/lambda/middleware/http-error-handler.js";
 import { httpJsonBodyParser } from "@amzn/innovation-sandbox-commons/lambda/middleware/http-json-body-parser.js";
+import {
+  ContextWithConfig,
+  isbConfigMiddleware,
+} from "@amzn/innovation-sandbox-commons/lambda/middleware/isb-config-middleware.js";
 import { IsbClients } from "@amzn/innovation-sandbox-commons/sdk-clients/index.js";
-import { IsbServices } from "@amzn/innovation-sandbox-commons/isb-services/index.js";
 import { fromTemporaryIsbIdcCredentials } from "@amzn/innovation-sandbox-commons/utils/cross-account-roles.js";
 
 const tracer = new Tracer();
-const logger = new Logger({ serviceName: "WorkshopGuests" });
+const logger = new Logger();
 
 const middyFactory = middy<
   IsbApiEvent,
   any,
   Error,
-  IsbApiContext<WorkshopGuestLambdaEnvironment>
+  ContextWithConfig & IsbApiContext<WorkshopGuestLambdaEnvironment>
 >;
 
 const routes: Route<IsbApiEvent, APIGatewayProxyResult>[] = [
@@ -64,13 +68,19 @@ export const handler = apiMiddlewareBundle({
   logger,
   tracer,
   environmentSchema: WorkshopGuestLambdaEnvironmentSchema,
-}).handler(httpRouterHandler(routes));
+})
+  .use(isbConfigMiddleware())
+  .handler(httpRouterHandler(routes));
 
-function isAdmin(context: IsbApiContext<WorkshopGuestLambdaEnvironment>): boolean {
+function isAdmin(
+  context: ContextWithConfig & IsbApiContext<WorkshopGuestLambdaEnvironment>,
+): boolean {
   return context.user.roles?.includes("Admin") ?? false;
 }
 
-function requireAdmin(context: IsbApiContext<WorkshopGuestLambdaEnvironment>): void {
+function requireAdmin(
+  context: ContextWithConfig & IsbApiContext<WorkshopGuestLambdaEnvironment>,
+): void {
   if (!isAdmin(context)) {
     throw createHttpJSendError({
       statusCode: 403,
@@ -110,7 +120,7 @@ async function getPermissionSetArn(
 
 async function listWorkshopGuestsHandler(
   _event: IsbApiEvent,
-  context: IsbApiContext<WorkshopGuestLambdaEnvironment>,
+  context: ContextWithConfig & IsbApiContext<WorkshopGuestLambdaEnvironment>,
 ): Promise<APIGatewayProxyResult> {
   requireAdmin(context);
 
@@ -133,7 +143,7 @@ async function listWorkshopGuestsHandler(
 
 async function onboardWorkshopGuestsHandler(
   event: IsbApiEvent,
-  context: IsbApiContext<WorkshopGuestLambdaEnvironment>,
+  context: ContextWithConfig & IsbApiContext<WorkshopGuestLambdaEnvironment>,
 ): Promise<APIGatewayProxyResult> {
   requireAdmin(context);
 
@@ -166,7 +176,7 @@ async function onboardWorkshopGuestsHandler(
 
 async function cleanupWorkshopGuestsHandler(
   event: IsbApiEvent,
-  context: IsbApiContext<WorkshopGuestLambdaEnvironment>,
+  context: ContextWithConfig & IsbApiContext<WorkshopGuestLambdaEnvironment>,
 ): Promise<APIGatewayProxyResult> {
   requireAdmin(context);
 
