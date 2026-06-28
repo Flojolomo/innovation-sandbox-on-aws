@@ -130,6 +130,17 @@ export function getInnovationSandboxWriteProtectionScp(
   return convertToPolicyDocument(writeProtectionPolicy);
 }
 
+export function getInnovationSandboxWorkshopGuestRestrictionsScp(
+  props: IsbScpPolicyProps,
+): PolicyDocument {
+  const workshopGuestPolicy = loadPolicyFromFile(
+    "isb-workshop-guest-restrictions-scp.json",
+    props.namespace,
+    props.isbManagedRegions,
+  );
+  return convertToPolicyDocument(workshopGuestPolicy);
+}
+
 function loadPolicyFromFile(
   fileName: string,
   namespace?: string,

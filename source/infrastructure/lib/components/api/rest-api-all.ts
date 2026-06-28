@@ -25,6 +25,7 @@ import { ConfigurationsApi } from "@amzn/innovation-sandbox-infrastructure/compo
 import { LeaseTemplatesApi } from "@amzn/innovation-sandbox-infrastructure/components/api/lease-templates-api";
 import { LeasesApi } from "@amzn/innovation-sandbox-infrastructure/components/api/leases-api";
 import { Waf } from "@amzn/innovation-sandbox-infrastructure/components/api/waf";
+import { WorkshopGuestsApi } from "@amzn/innovation-sandbox-infrastructure/components/api/workshop-guests-api";
 import { addAppConfigExtensionLayer } from "@amzn/innovation-sandbox-infrastructure/components/config/app-config-lambda-extension";
 import { IsbLambdaFunction } from "@amzn/innovation-sandbox-infrastructure/components/isb-lambda-function";
 import { IsbKmsKeys } from "@amzn/innovation-sandbox-infrastructure/components/kms";
@@ -207,5 +208,10 @@ export class RestApi extends ApiGatewayRestApi {
     new AccountsApi(this, scope, apiResourceProps);
     new BlueprintsApi(this, scope, apiResourceProps);
     new ConfigurationsApi(this, scope, apiResourceProps);
+    new WorkshopGuestsApi(this, scope, {
+      ...apiResourceProps,
+      identityStoreId: IsbComputeStack.sharedSpokeConfig.idc.identityStoreId,
+      ssoInstanceArn: IsbComputeStack.sharedSpokeConfig.idc.ssoInstanceArn,
+    });
   }
 }

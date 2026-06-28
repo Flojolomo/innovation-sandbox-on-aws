@@ -4628,6 +4628,35 @@ exports[`IsbComputeStack Snapshot > matches the snapshot 1`] = `
             {
               "Action": "kms:Decrypt",
               "Condition": {
+                "StringEquals": {
+                  "kms:ViaService": {
+                    "Fn::Join": [
+                      "",
+                      [
+                        "secretsmanager.",
+                        {
+                          "Ref": "AWS::Region"
+                        },
+                        ".amazonaws.com"
+                      ]
+                    ]
+                  }
+                }
+              },
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::GetAtt": [
+                    "WorkshopGuestsLambdaFunctionFunctionRole4889C41D",
+                    "Arn"
+                  ]
+                }
+              },
+              "Resource": "*"
+            },
+            {
+              "Action": "kms:Decrypt",
+              "Condition": {
                 "ArnLike": {
                   "AWS:SourceArn": {
                     "Fn::Join": [
@@ -5395,6 +5424,12 @@ exports[`IsbComputeStack Snapshot > matches the snapshot 1`] = `
                     {
                       "Fn::GetAtt": [
                         "AccountsLambdaFunctionFunctionRole3A22EFEC",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "WorkshopGuestsLambdaFunctionFunctionRole4889C41D",
                         "Arn"
                       ]
                     },
@@ -11303,7 +11338,7 @@ exports[`IsbComputeStack Snapshot > matches the snapshot 1`] = `
       "UpdateReplacePolicy": "Retain",
       "DeletionPolicy": "Retain"
     },
-    "IsbRestApiDeployment120FC0533f5379d18419393d9b0e665eed5a0e4a": {
+    "IsbRestApiDeployment120FC053e085937e06dd22c11bfd987e9c27238d": {
       "Type": "AWS::ApiGateway::Deployment",
       "Properties": {
         "Description": "Innovation Sandbox on AWS Rest API",
@@ -11364,7 +11399,13 @@ exports[`IsbComputeStack Snapshot > matches the snapshot 1`] = `
         "IsbRestApileaseTemplatesleaseTemplateName6CF1F9DC",
         "IsbRestApileaseTemplatesGETD139D035",
         "IsbRestApileaseTemplatesPOST61718B66",
-        "IsbRestApileaseTemplates87AB84C6"
+        "IsbRestApileaseTemplates87AB84C6",
+        "IsbRestApiworkshopguestscleanupPOST16246850",
+        "IsbRestApiworkshopguestscleanupF43223FD",
+        "IsbRestApiworkshopguestsGETF92A3F98",
+        "IsbRestApiworkshopguestsonboardPOSTB69A5417",
+        "IsbRestApiworkshopguestsonboardED5ABC8C",
+        "IsbRestApiworkshopguests9937ACB9"
       ],
       "Metadata": {
         "aws:cdk:do-not-refactor": true
@@ -11383,7 +11424,7 @@ exports[`IsbComputeStack Snapshot > matches the snapshot 1`] = `
           "Format": "$context.identity.sourceIp $context.identity.caller $context.identity.user [$context.requestTime] \\"$context.httpMethod $context.resourcePath $context.protocol\\" $context.status $context.responseLength $context.requestId"
         },
         "DeploymentId": {
-          "Ref": "IsbRestApiDeployment120FC0533f5379d18419393d9b0e665eed5a0e4a"
+          "Ref": "IsbRestApiDeployment120FC053e085937e06dd22c11bfd987e9c27238d"
         },
         "MethodSettings": [
           {
@@ -15600,6 +15641,408 @@ exports[`IsbComputeStack Snapshot > matches the snapshot 1`] = `
         },
         "ResourceId": {
           "Ref": "IsbRestApiconfigurations6FE57EA4"
+        },
+        "RestApiId": {
+          "Ref": "IsbRestApi377E2CC6"
+        }
+      }
+    },
+    "IsbRestApiworkshopguests9937ACB9": {
+      "Type": "AWS::ApiGateway::Resource",
+      "Properties": {
+        "ParentId": {
+          "Fn::GetAtt": [
+            "IsbRestApi377E2CC6",
+            "RootResourceId"
+          ]
+        },
+        "PathPart": "workshop-guests",
+        "RestApiId": {
+          "Ref": "IsbRestApi377E2CC6"
+        }
+      }
+    },
+    "IsbRestApiworkshopguestsGETApiPermissionIsbComputeStackIsbRestApiAC643E2AGETworkshopguests4EF24BB5": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "WorkshopGuestsLambdaFunctionB6D223E0",
+            "Arn"
+          ]
+        },
+        "Principal": "apigateway.amazonaws.com",
+        "SourceArn": {
+          "Fn::Join": [
+            "",
+            [
+              "arn:",
+              {
+                "Ref": "AWS::Partition"
+              },
+              ":execute-api:",
+              {
+                "Ref": "AWS::Region"
+              },
+              ":",
+              {
+                "Ref": "AWS::AccountId"
+              },
+              ":",
+              {
+                "Ref": "IsbRestApi377E2CC6"
+              },
+              "/",
+              {
+                "Ref": "IsbRestApiDeploymentStageprod7DDD9304"
+              },
+              "/GET/workshop-guests"
+            ]
+          ]
+        }
+      }
+    },
+    "IsbRestApiworkshopguestsGETApiPermissionTestIsbComputeStackIsbRestApiAC643E2AGETworkshopguests5D4DA940": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "WorkshopGuestsLambdaFunctionB6D223E0",
+            "Arn"
+          ]
+        },
+        "Principal": "apigateway.amazonaws.com",
+        "SourceArn": {
+          "Fn::Join": [
+            "",
+            [
+              "arn:",
+              {
+                "Ref": "AWS::Partition"
+              },
+              ":execute-api:",
+              {
+                "Ref": "AWS::Region"
+              },
+              ":",
+              {
+                "Ref": "AWS::AccountId"
+              },
+              ":",
+              {
+                "Ref": "IsbRestApi377E2CC6"
+              },
+              "/test-invoke-stage/GET/workshop-guests"
+            ]
+          ]
+        }
+      }
+    },
+    "IsbRestApiworkshopguestsGETF92A3F98": {
+      "Type": "AWS::ApiGateway::Method",
+      "Properties": {
+        "AuthorizationType": "CUSTOM",
+        "AuthorizerId": {
+          "Ref": "AuthorizerBD825682"
+        },
+        "HttpMethod": "GET",
+        "Integration": {
+          "IntegrationHttpMethod": "POST",
+          "Type": "AWS_PROXY",
+          "Uri": {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition"
+                },
+                ":apigateway:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":lambda:path/2015-03-31/functions/",
+                {
+                  "Fn::GetAtt": [
+                    "WorkshopGuestsLambdaFunctionB6D223E0",
+                    "Arn"
+                  ]
+                },
+                "/invocations"
+              ]
+            ]
+          }
+        },
+        "ResourceId": {
+          "Ref": "IsbRestApiworkshopguests9937ACB9"
+        },
+        "RestApiId": {
+          "Ref": "IsbRestApi377E2CC6"
+        }
+      }
+    },
+    "IsbRestApiworkshopguestsonboardED5ABC8C": {
+      "Type": "AWS::ApiGateway::Resource",
+      "Properties": {
+        "ParentId": {
+          "Ref": "IsbRestApiworkshopguests9937ACB9"
+        },
+        "PathPart": "onboard",
+        "RestApiId": {
+          "Ref": "IsbRestApi377E2CC6"
+        }
+      }
+    },
+    "IsbRestApiworkshopguestsonboardPOSTApiPermissionIsbComputeStackIsbRestApiAC643E2APOSTworkshopguestsonboardC525B676": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "WorkshopGuestsLambdaFunctionB6D223E0",
+            "Arn"
+          ]
+        },
+        "Principal": "apigateway.amazonaws.com",
+        "SourceArn": {
+          "Fn::Join": [
+            "",
+            [
+              "arn:",
+              {
+                "Ref": "AWS::Partition"
+              },
+              ":execute-api:",
+              {
+                "Ref": "AWS::Region"
+              },
+              ":",
+              {
+                "Ref": "AWS::AccountId"
+              },
+              ":",
+              {
+                "Ref": "IsbRestApi377E2CC6"
+              },
+              "/",
+              {
+                "Ref": "IsbRestApiDeploymentStageprod7DDD9304"
+              },
+              "/POST/workshop-guests/onboard"
+            ]
+          ]
+        }
+      }
+    },
+    "IsbRestApiworkshopguestsonboardPOSTApiPermissionTestIsbComputeStackIsbRestApiAC643E2APOSTworkshopguestsonboard5A09A5CB": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "WorkshopGuestsLambdaFunctionB6D223E0",
+            "Arn"
+          ]
+        },
+        "Principal": "apigateway.amazonaws.com",
+        "SourceArn": {
+          "Fn::Join": [
+            "",
+            [
+              "arn:",
+              {
+                "Ref": "AWS::Partition"
+              },
+              ":execute-api:",
+              {
+                "Ref": "AWS::Region"
+              },
+              ":",
+              {
+                "Ref": "AWS::AccountId"
+              },
+              ":",
+              {
+                "Ref": "IsbRestApi377E2CC6"
+              },
+              "/test-invoke-stage/POST/workshop-guests/onboard"
+            ]
+          ]
+        }
+      }
+    },
+    "IsbRestApiworkshopguestsonboardPOSTB69A5417": {
+      "Type": "AWS::ApiGateway::Method",
+      "Properties": {
+        "AuthorizationType": "CUSTOM",
+        "AuthorizerId": {
+          "Ref": "AuthorizerBD825682"
+        },
+        "HttpMethod": "POST",
+        "Integration": {
+          "IntegrationHttpMethod": "POST",
+          "Type": "AWS_PROXY",
+          "Uri": {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition"
+                },
+                ":apigateway:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":lambda:path/2015-03-31/functions/",
+                {
+                  "Fn::GetAtt": [
+                    "WorkshopGuestsLambdaFunctionB6D223E0",
+                    "Arn"
+                  ]
+                },
+                "/invocations"
+              ]
+            ]
+          }
+        },
+        "ResourceId": {
+          "Ref": "IsbRestApiworkshopguestsonboardED5ABC8C"
+        },
+        "RestApiId": {
+          "Ref": "IsbRestApi377E2CC6"
+        }
+      }
+    },
+    "IsbRestApiworkshopguestscleanupF43223FD": {
+      "Type": "AWS::ApiGateway::Resource",
+      "Properties": {
+        "ParentId": {
+          "Ref": "IsbRestApiworkshopguests9937ACB9"
+        },
+        "PathPart": "cleanup",
+        "RestApiId": {
+          "Ref": "IsbRestApi377E2CC6"
+        }
+      }
+    },
+    "IsbRestApiworkshopguestscleanupPOSTApiPermissionIsbComputeStackIsbRestApiAC643E2APOSTworkshopguestscleanupD76C13AF": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "WorkshopGuestsLambdaFunctionB6D223E0",
+            "Arn"
+          ]
+        },
+        "Principal": "apigateway.amazonaws.com",
+        "SourceArn": {
+          "Fn::Join": [
+            "",
+            [
+              "arn:",
+              {
+                "Ref": "AWS::Partition"
+              },
+              ":execute-api:",
+              {
+                "Ref": "AWS::Region"
+              },
+              ":",
+              {
+                "Ref": "AWS::AccountId"
+              },
+              ":",
+              {
+                "Ref": "IsbRestApi377E2CC6"
+              },
+              "/",
+              {
+                "Ref": "IsbRestApiDeploymentStageprod7DDD9304"
+              },
+              "/POST/workshop-guests/cleanup"
+            ]
+          ]
+        }
+      }
+    },
+    "IsbRestApiworkshopguestscleanupPOSTApiPermissionTestIsbComputeStackIsbRestApiAC643E2APOSTworkshopguestscleanup4D0A8001": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "WorkshopGuestsLambdaFunctionB6D223E0",
+            "Arn"
+          ]
+        },
+        "Principal": "apigateway.amazonaws.com",
+        "SourceArn": {
+          "Fn::Join": [
+            "",
+            [
+              "arn:",
+              {
+                "Ref": "AWS::Partition"
+              },
+              ":execute-api:",
+              {
+                "Ref": "AWS::Region"
+              },
+              ":",
+              {
+                "Ref": "AWS::AccountId"
+              },
+              ":",
+              {
+                "Ref": "IsbRestApi377E2CC6"
+              },
+              "/test-invoke-stage/POST/workshop-guests/cleanup"
+            ]
+          ]
+        }
+      }
+    },
+    "IsbRestApiworkshopguestscleanupPOST16246850": {
+      "Type": "AWS::ApiGateway::Method",
+      "Properties": {
+        "AuthorizationType": "CUSTOM",
+        "AuthorizerId": {
+          "Ref": "AuthorizerBD825682"
+        },
+        "HttpMethod": "POST",
+        "Integration": {
+          "IntegrationHttpMethod": "POST",
+          "Type": "AWS_PROXY",
+          "Uri": {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition"
+                },
+                ":apigateway:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":lambda:path/2015-03-31/functions/",
+                {
+                  "Fn::GetAtt": [
+                    "WorkshopGuestsLambdaFunctionB6D223E0",
+                    "Arn"
+                  ]
+                },
+                "/invocations"
+              ]
+            ]
+          }
+        },
+        "ResourceId": {
+          "Ref": "IsbRestApiworkshopguestscleanupF43223FD"
         },
         "RestApiId": {
           "Ref": "IsbRestApi377E2CC6"
@@ -20014,6 +20457,336 @@ exports[`IsbComputeStack Snapshot > matches the snapshot 1`] = `
       "DependsOn": [
         "ConfigurationsLambdaFunctionFunctionRoleDefaultPolicy2216B975",
         "ConfigurationsLambdaFunctionFunctionRole3EA8ADFC"
+      ],
+      "Metadata": {
+        "guard": {
+          "SuppressedRules": [
+            "LAMBDA_INSIDE_VPC",
+            "LAMBDA_CONCURRENCY_CHECK"
+          ]
+        }
+      }
+    },
+    "WorkshopGuestsLambdaFunctionFunctionRole4889C41D": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Tags": [
+          {
+            "Key": "aws-solutions:isb-id",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  {
+                    "Ref": "Namespace"
+                  },
+                  "_isb"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "WorkshopGuestsLambdaFunctionFunctionRoleDefaultPolicy76649741": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "xray:PutTraceSegments",
+                "xray:PutTelemetryRecords"
+              ],
+              "Effect": "Allow",
+              "Resource": "*"
+            },
+            {
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "ISBLogGroupE607F9A7",
+                  "Arn"
+                ]
+              }
+            },
+            {
+              "Action": "ssm:GetParameter",
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":ssm:",
+                    {
+                      "Ref": "AWS::Region"
+                    },
+                    ":",
+                    {
+                      "Ref": "IdcAccountId"
+                    },
+                    ":parameter/InnovationSandbox_",
+                    {
+                      "Ref": "Namespace"
+                    },
+                    "_Idc_Configuration"
+                  ]
+                ]
+              }
+            },
+            {
+              "Action": [
+                "secretsmanager:GetSecretValue",
+                "secretsmanager:DescribeSecret"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Ref": "JwtSecretB8834B39"
+              }
+            },
+            {
+              "Action": [
+                "kms:Decrypt",
+                "kms:Encrypt",
+                "kms:ReEncrypt*",
+                "kms:GenerateDataKey*"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "IsbKmsKeyIsbComputeStack45953B87",
+                  "Arn"
+                ]
+              }
+            },
+            {
+              "Action": [
+                "identitystore:CreateUser",
+                "identitystore:DeleteUser",
+                "identitystore:DescribeUser",
+                "identitystore:GetUserId",
+                "identitystore:GetGroupId",
+                "identitystore:CreateGroup",
+                "identitystore:DeleteGroup",
+                "identitystore:DescribeGroup",
+                "identitystore:CreateGroupMembership",
+                "identitystore:DeleteGroupMembership",
+                "identitystore:ListGroupMemberships"
+              ],
+              "Effect": "Allow",
+              "Resource": "*"
+            },
+            {
+              "Action": [
+                "sso:CreateAccountAssignment",
+                "sso:DeleteAccountAssignment"
+              ],
+              "Effect": "Allow",
+              "Resource": "*"
+            },
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "IntermediateRole6D2F2036",
+                  "Arn"
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "WorkshopGuestsLambdaFunctionFunctionRoleDefaultPolicy76649741",
+        "Roles": [
+          {
+            "Ref": "WorkshopGuestsLambdaFunctionFunctionRole4889C41D"
+          }
+        ]
+      }
+    },
+    "WorkshopGuestsLambdaFunctionB6D223E0": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Architectures": [
+          "arm64"
+        ],
+        "Code": "Omitted to remove snapshot dependency on hash",
+        "Description": "Lambda used as API GW method integration for workshop guests management",
+        "Environment": {
+          "Variables": {
+            "NODE_OPTIONS": "--enable-source-maps",
+            "USER_AGENT_EXTRA": "AwsSolution/SO0284/v1.2.12",
+            "POWERTOOLS_LOG_LEVEL": {
+              "Fn::FindInMap": [
+                "Mapping",
+                "context",
+                "logLevel",
+                {
+                  "DefaultValue": ""
+                }
+              ]
+            },
+            "POWERTOOLS_SERVICE_NAME": "innovation-sandbox",
+            "AWS_XRAY_CONTEXT_MISSING": "IGNORE_ERROR",
+            "JWT_SECRET_NAME": {
+              "Fn::Join": [
+                "",
+                [
+                  "/InnovationSandbox/",
+                  {
+                    "Ref": "Namespace"
+                  },
+                  "/Auth/JwtSecret"
+                ]
+              ]
+            },
+            "IDENTITY_STORE_ID": {
+              "Fn::GetAtt": [
+                "IsbSpokeConfigJsonParamResolverParseJsonConfigurationIsbCustomResource57F98B57",
+                "identityStoreId"
+              ]
+            },
+            "SSO_INSTANCE_ARN": {
+              "Fn::GetAtt": [
+                "IsbSpokeConfigJsonParamResolverParseJsonConfigurationIsbCustomResource57F98B57",
+                "ssoInstanceArn"
+              ]
+            },
+            "NAMESPACE": {
+              "Ref": "Namespace"
+            },
+            "IDC_CONFIG_PARAM_ARN": {
+              "Fn::Join": [
+                "",
+                [
+                  "arn:",
+                  {
+                    "Ref": "AWS::Partition"
+                  },
+                  ":ssm:",
+                  {
+                    "Ref": "AWS::Region"
+                  },
+                  ":",
+                  {
+                    "Ref": "IdcAccountId"
+                  },
+                  ":parameter/InnovationSandbox_",
+                  {
+                    "Ref": "Namespace"
+                  },
+                  "_Idc_Configuration"
+                ]
+              ]
+            },
+            "INTERMEDIATE_ROLE_ARN": {
+              "Fn::GetAtt": [
+                "IntermediateRole6D2F2036",
+                "Arn"
+              ]
+            },
+            "IDC_ROLE_ARN": {
+              "Fn::Join": [
+                "",
+                [
+                  "arn:",
+                  {
+                    "Ref": "AWS::Partition"
+                  },
+                  ":iam::",
+                  {
+                    "Ref": "IdcAccountId"
+                  },
+                  ":role/InnovationSandbox-",
+                  {
+                    "Ref": "Namespace"
+                  },
+                  "-IdcRole"
+                ]
+              ]
+            }
+          }
+        },
+        "FunctionName": {
+          "Fn::Join": [
+            "",
+            [
+              "ISB-WorkshopGuestsLambdaFunction-",
+              {
+                "Ref": "Namespace"
+              }
+            ]
+          ]
+        },
+        "Handler": "index.handler",
+        "Layers": [
+          {
+            "Ref": "IsbSpokeConfigJsonParamResolverISBLambdaLayerIsbComputeStackDependenciesLayerVersion5B4AA878"
+          },
+          {
+            "Ref": "IsbSpokeConfigJsonParamResolverISBLambdaLayerIsbComputeStackCommonLayerVersion27C21445"
+          }
+        ],
+        "LoggingConfig": {
+          "LogFormat": "JSON",
+          "LogGroup": {
+            "Ref": "ISBLogGroupE607F9A7"
+          },
+          "SystemLogLevel": "INFO"
+        },
+        "MemorySize": 1024,
+        "Role": {
+          "Fn::GetAtt": [
+            "WorkshopGuestsLambdaFunctionFunctionRole4889C41D",
+            "Arn"
+          ]
+        },
+        "Runtime": "nodejs22.x",
+        "Tags": [
+          {
+            "Key": "aws-solutions:isb-id",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  {
+                    "Ref": "Namespace"
+                  },
+                  "_isb"
+                ]
+              ]
+            }
+          }
+        ],
+        "Timeout": 60,
+        "TracingConfig": {
+          "Mode": "Active"
+        }
+      },
+      "DependsOn": [
+        "WorkshopGuestsLambdaFunctionFunctionRoleDefaultPolicy76649741",
+        "WorkshopGuestsLambdaFunctionFunctionRole4889C41D"
       ],
       "Metadata": {
         "guard": {

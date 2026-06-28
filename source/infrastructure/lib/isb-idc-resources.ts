@@ -81,7 +81,12 @@ export class IsbIdcResources {
         statements: [
           new PolicyStatement({
             effect: Effect.ALLOW,
-            actions: ["identitystore:GetUserId", "identitystore:DescribeUser"],
+            actions: [
+              "identitystore:GetUserId",
+              "identitystore:DescribeUser",
+              "identitystore:CreateUser",
+              "identitystore:DeleteUser",
+            ],
             resources: [
               identityStoreArn,
               Stack.of(scope).formatArn({
@@ -96,7 +101,13 @@ export class IsbIdcResources {
           }),
           new PolicyStatement({
             effect: Effect.ALLOW,
-            actions: ["identitystore:ListGroups"],
+            actions: [
+              "identitystore:ListGroups",
+              "identitystore:GetGroupId",
+              "identitystore:CreateGroup",
+              "identitystore:DeleteGroup",
+              "identitystore:DescribeGroup",
+            ],
             resources: [
               identityStoreArn,
               Stack.of(scope).formatArn({
@@ -114,6 +125,8 @@ export class IsbIdcResources {
             actions: [
               "identitystore:ListGroupMembershipsForMember",
               "identitystore:ListGroupMemberships",
+              "identitystore:CreateGroupMembership",
+              "identitystore:DeleteGroupMembership",
             ],
             resources: [
               identityStoreArn,
