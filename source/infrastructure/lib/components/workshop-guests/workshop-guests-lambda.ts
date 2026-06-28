@@ -94,40 +94,6 @@ export class WorkshopGuestsLambda {
       this.lambdaFunction.lambdaFunction,
     );
 
-    // // Grant Identity Store permissions (via cross-account role)
-    // this.lambdaFunction.lambdaFunction.addToRolePolicy(
-    //   new PolicyStatement({
-    //     effect: Effect.ALLOW,
-    //     actions: [
-    //       // TODO this is not required!
-    //       "identitystore:CreateUser",
-    //       "identitystore:DeleteUser",
-    //       "identitystore:DescribeUser",
-    //       "identitystore:GetUserId",
-    //       "identitystore:GetGroupId",
-    //       "identitystore:CreateGroup",
-    //       "identitystore:DeleteGroup",
-    //       "identitystore:DescribeGroup",
-    //       "identitystore:CreateGroupMembership",
-    //       "identitystore:DeleteGroupMembership",
-    //       "identitystore:ListGroupMemberships",
-    //     ],
-    //     resources: ["*"],
-    //   }),
-    // );
-
-    // // Grant SSO Admin permissions (via cross-account role)
-    // this.lambdaFunction.lambdaFunction.addToRolePolicy(
-    //   new PolicyStatement({
-    //     effect: Effect.ALLOW,
-    //     actions: [
-    //       "sso:CreateAccountAssignment",
-    //       "sso:DeleteAccountAssignment",
-    //     ],
-    //     resources: ["*"],
-    //   }),
-    // );
-
     // Grant AppConfig read for global config
     grantIsbAppConfigRead(
       scope,
