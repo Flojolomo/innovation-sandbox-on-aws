@@ -87,4 +87,13 @@ export const authorizationMap: AuthorizationMapType = {
     PUT: ["Admin"], // Only admins can update
     DELETE: ["Admin"], // Only admins can delete
   },
+  "/workshop-guests": {
+    GET: ["Admin"],
+  },
+  "/workshop-guests/onboard": {
+    POST: ["Admin"],
+  },
+  "/workshop-guests/cleanup": {
+    POST: ["Admin"],
+  },
 };
