@@ -3,6 +3,7 @@
 
 import { LeaseWithLeaseId } from "@amzn/innovation-sandbox-commons/data/lease/lease";
 import {
+  LeaseCollaborator,
   LeasePatchRequest,
   MonitoredLeaseWithLeaseId,
   NewLeaseRequest,
@@ -98,5 +99,31 @@ export class LeaseService {
       action,
       comments,
     });
+  }
+
+  async getCollaborators(leaseId: string): Promise<LeaseCollaborator[]> {
+    const response = await this.api.get<ApiPaginatedResult<LeaseCollaborator>>(
+      `/leases/${leaseId}/collaborators`,
+    );
+    return response.result;
+  }
+
+  async inviteCollaborator(
+    leaseId: string,
+    collaboratorEmail: string,
+  ): Promise<LeaseCollaborator> {
+    return await this.api.post<LeaseCollaborator>(
+      `/leases/${leaseId}/collaborators`,
+      { collaboratorEmail },
+    );
+  }
+
+  async revokeCollaborator(
+    leaseId: string,
+    collaboratorEmail: string,
+  ): Promise<void> {
+    await this.api.delete(
+      `/leases/${leaseId}/collaborators/${encodeURIComponent(collaboratorEmail)}`,
+    );
   }
 }

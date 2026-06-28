@@ -1,11 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import {
-  Button,
-  Header,
-  SpaceBetween,
-} from "@cloudscape-design/components";
+import { Button, Header, SpaceBetween } from "@cloudscape-design/components";
 import { useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -15,6 +11,7 @@ import { ContentLayout } from "@amzn/innovation-sandbox-frontend/components/Cont
 import { ErrorPanel } from "@amzn/innovation-sandbox-frontend/components/ErrorPanel";
 import { Loader } from "@amzn/innovation-sandbox-frontend/components/Loader";
 import { Markdown } from "@amzn/innovation-sandbox-frontend/components/Markdown";
+import { CollaboratorsList } from "@amzn/innovation-sandbox-frontend/domains/leases/components/CollaboratorsList";
 import { LeaseSummary } from "@amzn/innovation-sandbox-frontend/domains/leases/components/LeaseSummary";
 import { PendingExtensionInfo } from "@amzn/innovation-sandbox-frontend/domains/leases/components/PendingExtensionInfo";
 import { RequestExtensionModal } from "@amzn/innovation-sandbox-frontend/domains/leases/components/RequestExtensionModal";
@@ -148,6 +145,9 @@ export const LeaseDetails = () => {
               : undefined
           }
         />
+        {isMonitoredLease(lease) && (
+          <CollaboratorsList leaseId={leaseId!} leaseStatus={lease.status} />
+        )}
       </SpaceBetween>
     </ContentLayout>
   );

@@ -223,3 +223,49 @@ export const useGetPendingExtensions = () => {
     },
   });
 };
+
+export const useGetCollaborators = (leaseId: string) => {
+  return useQuery({
+    queryKey: ["leases", leaseId, "collaborators"],
+    queryFn: async () => await new LeaseService().getCollaborators(leaseId),
+    enabled: !!leaseId,
+  });
+};
+
+export const useInviteCollaborator = () => {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      leaseId,
+      collaboratorEmail,
+    }: {
+      leaseId: string;
+      collaboratorEmail: string;
+    }) =>
+      await new LeaseService().inviteCollaborator(leaseId, collaboratorEmail),
+    onSuccess: (_data, variables) => {
+      client.invalidateQueries({
+        queryKey: ["leases", variables.leaseId, "collaborators"],
+      });
+    },
+  });
+};
+
+export const useRevokeCollaborator = () => {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      leaseId,
+      collaboratorEmail,
+    }: {
+      leaseId: string;
+      collaboratorEmail: string;
+    }) =>
+      await new LeaseService().revokeCollaborator(leaseId, collaboratorEmail),
+    onSuccess: (_data, variables) => {
+      client.invalidateQueries({
+        queryKey: ["leases", variables.leaseId, "collaborators"],
+      });
+    },
+  });
+};

@@ -27,12 +27,13 @@ import {
   showErrorToast,
   showSuccessToast,
 } from "@amzn/innovation-sandbox-frontend/components/Toast";
+import { InviteCollaboratorModal } from "@amzn/innovation-sandbox-frontend/domains/leases/components/InviteCollaboratorModal";
 import { LeaseStatusBadge } from "@amzn/innovation-sandbox-frontend/domains/leases/components/LeaseStatusBadge";
 import { RequestExtensionModal } from "@amzn/innovation-sandbox-frontend/domains/leases/components/RequestExtensionModal";
 import { useTerminateLease } from "@amzn/innovation-sandbox-frontend/domains/leases/hooks";
 import { MonitoredLeaseWithLeaseId } from "@amzn/innovation-sandbox-frontend/domains/leases/types";
-import { getLeaseExpiryInfo } from "@amzn/innovation-sandbox-frontend/helpers/LeaseExpiryInfo";
 import { useGetConfigurations } from "@amzn/innovation-sandbox-frontend/domains/settings/hooks";
+import { getLeaseExpiryInfo } from "@amzn/innovation-sandbox-frontend/helpers/LeaseExpiryInfo";
 import { useModal } from "@amzn/innovation-sandbox-frontend/hooks/useModal";
 
 interface LeasePanelProps {
@@ -61,6 +62,13 @@ export const LeasePanel = ({ lease }: LeasePanelProps) => {
           onCancel={hideModal}
         />
       ),
+    });
+  };
+
+  const handleInviteCollaborator = () => {
+    showModal({
+      header: "Invite Collaborator",
+      content: <InviteCollaboratorModal leaseId={lease.leaseId} />,
     });
   };
 
@@ -105,6 +113,11 @@ export const LeasePanel = ({ lease }: LeasePanelProps) => {
                 <ButtonDropdown
                   items={[
                     {
+                      text: "Invite Collaborator",
+                      id: "invite-collaborator",
+                      disabled: lease.status !== "Active",
+                    },
+                    {
                       text: "Terminate Lease",
                       id: "terminate",
                     },
@@ -115,6 +128,9 @@ export const LeasePanel = ({ lease }: LeasePanelProps) => {
                   ]}
                   onItemClick={({ detail }) => {
                     switch (detail.id) {
+                      case "invite-collaborator":
+                        handleInviteCollaborator();
+                        break;
                       case "terminate":
                         setShowTerminateConfirm(true);
                         break;
